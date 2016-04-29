@@ -1,7 +1,7 @@
 #!/bin/bash
 
 apt-get update
-apt-get install git
+apt-get install -y git
 useradd -m -d /opt/storj storj
 sudo su - storj -c "curl -o- https://raw.githubusercontent.com/creationix/nvm/v0.31.0/install.sh | bash"
 sudo su - storj -c "source ~/.nvm/nvm.sh && nvm install stable && nvm use stable && nvm alias default stable"
