@@ -8,5 +8,5 @@ sudo su - storj -c "source ~/.nvm/nvm.sh && nvm install stable && nvm use stable
 sudo su - storj -c "git clone https://github.com/gordonwritescode/myspeed.git && cd myspeed && npm install"
 mkdir /var/log/storj
 chown storj:storj /var/log/storj
-curl -o /etc/init/myspeed.conf https://github.com/storj/storj-automation/raw/[hash]/myspeed/init/myspeed.conf
+curl -o /etc/init/myspeed.conf https://github.com/storj/storj-automation/raw/master/myspeed/init/myspeed.conf
 service myspeed start
