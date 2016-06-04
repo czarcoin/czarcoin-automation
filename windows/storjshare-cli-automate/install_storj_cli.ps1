@@ -10,18 +10,71 @@
 #---------------------------------------------------------[Initialisations]--------------------------------------------------------
 
 $client = New-Object System.Net.WebClient
-$script_version = "0.2 Beta"
+$script_version = "0.3 Beta"
 
 #----------------------------------------------------------[Declarations]----------------------------------------------------------
 
-$save_dir=$env:temp #target_path for downloaded files (Default: %TEMP%)
+$save_dir=$env:temp #path for downloaded files (Default: %TEMP%)
 
-$nodejs_ver = "4.4.5" #make sure to reference LTS branch version (Default: 4.4.5)
+$gitforwindows_ver="2.8.3"  #   (Default: 2.8.3)
+
+$nodejs_ver="4.4.5" #make sure to reference LTS branch version (Default: 4.4.5)
 
 $python_ver="2.7.11" #currently only use version 2 branch (Default: 2.7.11)
 $python_path = "C:\Python27\" #make sure ends with \ (Default: C:\Python27\)
 
 #-----------------------------------------------------------[Functions]------------------------------------------------------------
+
+function GitForWindowsCheck([string]$version) {
+    write-host "Checking if Git for Windows is installed..."
+    If(!(Get-IsProgramInstalled "Git")) {
+        write-host "Git for Windows $version is not installed."
+        if ([System.IntPtr]::Size -eq 4) {
+            $arch="32-bit"
+            $arch_ver='-32-bit'
+        } else {
+            $arch="64-bit"
+            $arch_ver='-64-bit'
+        }
+
+	    $filename = 'Git-' + $version + $arch_ver + '.exe';
+	    $save_path = '' + $save_dir + '\' + $filename;
+        $url='https://github.com/git-for-windows/git/releases/download/v' + $version + '.windows.1/' + $filename;
+	    if(!(Test-Path -pathType container $save_dir)) {
+		    write-host -fore red "Save directory " $save_dir " does not exist";
+		    exit;
+	    }
+
+        write-host "Downloading Git for Windows ("$arch")" $version "..."
+        DownloadFile $url $save_path
+        write-host "Git for Windows downloaded"
+
+	    write-host "Installing Git for Windows $version..."
+        $Arguments = "/SILENT"
+        $Arguements += "/COMPONENTS=""icons,ext\reg\shellhere,assoc,assoc_sh"""
+	    InstallEXE $save_path $Arguments
+        
+        If(!(Get-IsProgramInstalled "Git")) {
+           write-host -fore red "Git for Windows did not complete installation successfully...try manually installing it..."
+           exit;
+        }
+
+        write-host "Git for Windows Installed Successfully"
+    }
+    else
+    {
+        write-host "Git for Windows already installed."
+        write-host "Checking version..."
+
+        $version = Get-ProgramVersion( "Git" )
+        if(!$version) {
+            write-host -fore red "Git for Windows Version is Unknown - Error"
+            exit;
+        }
+
+        write-host -fore Green "Git for Windows Installed Version:" $version
+    }
+}
 
 function NodejsCheck([string]$version) {
     write-host "Checking if Node.js is installed..."
@@ -48,7 +101,7 @@ function NodejsCheck([string]$version) {
         write-host "Nodejs downloaded"
 
 	    write-host "Installing Node.js LTS $version..."
-	    InstallMSI $save_path $target_dir
+	    InstallMSI $save_path
         
         If(!(Get-IsProgramInstalled "Node.js")) {
            write-host -fore red "Node.js did not complete installation successfully...try manually installing it..."
@@ -97,7 +150,7 @@ function PythonCheck([string]$version) {
         write-host "Python downloaded"
 
 	    write-host "Installing Python $version..."
-	    InstallMSI $save_path $target_dir
+	    InstallMSI $save_path
         
         If(!(Get-IsProgramInstalled "Python")) {
            write-host -fore red "Python did not complete installation successfully...try manually installing it..."
@@ -214,6 +267,10 @@ function DownloadFile([string]$url, [string]$targetFile) {
     }
 }
 
+function InstallEXE([string]$installer, [string]$Arguments) {
+	Start-Process "`"$installer`"" -ArgumentList $Arguments -Wait
+}
+
 function InstallMSI([string]$installer) {
 	$Arguments = @()
 	$Arguments += "/i"
@@ -232,6 +289,11 @@ write-host -fore Cyan "Github Site: https://github.com/Storj/storj-automation"
 write-host -fore Red "USE AT YOUR OWN RISK"
 write-host ""
 write-host -fore Cyan "Checking for Pre-Requirements..."
+write-host ""
+write-host ""
+write-host -fore Yellow "Reviewing Git for Windows..."
+GitForWindowsCheck $gitforwindows_ver
+write-host -fore Green "Git for Windows Review Completed"
 write-host ""
 write-host ""
 write-host -fore Yellow "Reviewing Node.js..."
