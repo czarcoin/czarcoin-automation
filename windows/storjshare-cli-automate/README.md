@@ -12,12 +12,12 @@ Automates the installation of storjshare-cli for Windows only
 <br/>   -Server OS: Windows 2008 or newer
 <br/>
 <br/>TODO:
-<br/>   1) Github for Windows: https://git-for-windows.github.io/ 
+<br/>   1) Github for Windows: https://git-for-windows.github.io/ `(Completed)`
 <br/>   2) Node.js LTS 4.4.5 `(Completed)`
 <br/>   3) Python 2.7.11 `(Completed)`
-<br/>   4) Visual Studio Community 2015 Edition: (Custom Install, Select Visual C++ during the installation) https://www.visualstudio.com/
-<br/>   5) handle reboot
-<br/>   6) Open cmd (Win + R and type cmd) setx GYP_MSVS_VERSION 2015
+<br/>   4) Visual Studio Community 2015 Edition: (Custom Install, Select Visual C++ during the installation) `(Completed)`
+<br/>   5) setx GYP_MSVS_VERSION 2015 Environment Variable (making machine instead of user variable) `(preliminary code there, not finished, commented out)`
+<br/>   6) handle reboot
 <br/>
 <br/>LONGER TERM:
 <br/>   1) Follow the storjshare-cli installation guide: https://github.com/Storj/storjshare-cli#installation
