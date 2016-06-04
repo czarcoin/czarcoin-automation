@@ -10,7 +10,7 @@
 #---------------------------------------------------------[Initialisations]--------------------------------------------------------
 
 $client = New-Object System.Net.WebClient
-$script_version = "0.3 Beta"
+$script_version = "0.4 Beta"
 
 #----------------------------------------------------------[Declarations]----------------------------------------------------------
 
@@ -22,6 +22,9 @@ $nodejs_ver="4.4.5" #make sure to reference LTS branch version (Default: 4.4.5)
 
 $python_ver="2.7.11" #currently only use version 2 branch (Default: 2.7.11)
 $python_path = "C:\Python27\" #make sure ends with \ (Default: C:\Python27\)
+
+$visualstudio_ver="2015" # currently only supports 2015 Edition (Default: 2015)
+$visualstudio_dl="http://go.microsoft.com/fwlink/?LinkID=626924"  #  link to 2015 download   (Default: http://go.microsoft.com/fwlink/?LinkID=626924)
 
 #-----------------------------------------------------------[Functions]------------------------------------------------------------
 
@@ -50,8 +53,7 @@ function GitForWindowsCheck([string]$version) {
         write-host "Git for Windows downloaded"
 
 	    write-host "Installing Git for Windows $version..."
-        $Arguments = "/SILENT"
-        $Arguements += "/COMPONENTS=""icons,ext\reg\shellhere,assoc,assoc_sh"""
+        $Arguments = "/SILENT /COMPONENTS=""icons,ext\reg\shellhere,assoc,assoc_sh"""
 	    InstallEXE $save_path $Arguments
         
         If(!(Get-IsProgramInstalled "Git")) {
@@ -59,7 +61,7 @@ function GitForWindowsCheck([string]$version) {
            exit;
         }
 
-        write-host "Git for Windows Installed Successfully"
+        write-host -fore Green "Git for Windows Installed Successfully"
     }
     else
     {
@@ -108,7 +110,7 @@ function NodejsCheck([string]$version) {
            exit;
         }
 
-        write-host "Node.js Installed Successfully"
+        write-host -fore Green "Node.js Installed Successfully"
     }
     else
     {
@@ -157,7 +159,7 @@ function PythonCheck([string]$version) {
            exit;
         }
 
-        write-host "Python Installed Successfully"
+        write-host -fore Green "Python Installed Successfully"
     }
     else
     {
@@ -205,6 +207,63 @@ function PythonCheck([string]$version) {
         write-host "Python Environment Path" $python_path 'already within System Environment Path, skipping...'
     }
     $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine")
+}
+
+function VisualStudioCheck([string]$version, [string]$dl_link) {
+    write-host "Checking if Visual Studio Community Edition is installed..."
+    If(!(Get-IsProgramInstalled "Microsoft Visual Studio Community")) {
+        write-host "Visual Studio Community $version Edition is not installed."
+        $filename = 'vs_community_ENU.exe';
+	    $save_path = '' + $save_dir + '\' + $filename;
+	    if(!(Test-Path -pathType container $save_dir)) {
+		    write-host -fore red "Save directory " $save_dir " does not exist";
+		    exit;
+	    }
+
+        write-host "Downloading Visual Studio Community $version Edition..."
+        FollowDownloadFile $dl_link $save_path
+        write-host "Visual Studio Community $version Edition downloaded"
+
+	    write-host "Installing Visual Studio Community $version Edition..."
+        $Arguments = "/InstallSelectableItems NativeLanguageSupport_Group /NoRestart /Passive"
+	    InstallEXE $save_path $Arguments
+
+        If(!(Get-IsProgramInstalled "Microsoft Visual Studio Community")) {
+           write-host -fore red "Visual Studio Community $version Edition did not complete installation successfully...try manually installing it..."
+           exit;
+        }
+
+        write-host -fore Green "Visual Studio Community $version Edition Installed"
+    }
+    else
+    {
+        write-host "Visual Studio Community $version Edition already installed."
+        write-host "Checking version..."
+
+        $version = Get-ProgramVersion( "Microsoft Visual Studio Community" )
+        if(!$version) {
+            write-host -fore red "Visual Studio Community Edition Version is Unknown - Error"
+            exit;
+        }
+
+        write-host -fore Green "Visual Studio Community $version Edition Installed"
+    }
+
+    <# - Not developed yet -- support for environment variable
+    write-host "Checking for Visual Studio Community $version Edition Environment Variable..."
+    $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine")
+    $PathasArray=($Env:PATH).split(';')
+    If ($PathasArray -contains $python_path -or $PathAsArray -contains $python_path+'\') {
+        write-host "Python Environment Path" $python_path 'already within System Environment Path, skipping...'
+    }
+    else
+    {
+        $OldPath=(Get-ItemProperty -Path 'Registry::HKEY_LOCAL_MACHINE\System\CurrentControlSet\Control\Session Manager\Environment' -Name PATH).Path
+        $NewPath=$OldPath+';’+$python_path;
+        Set-ItemProperty -Path 'Registry::HKEY_LOCAL_MACHINE\System\CurrentControlSet\Control\Session Manager\Environment' -Name PATH –Value $newPath
+        write-host "Visual Studio Community $version Edition Environment Variable Added:" $python_path
+    }
+    #>
 }
 
 function Get-IsProgramInstalled([string]$program) {
@@ -267,6 +326,15 @@ function DownloadFile([string]$url, [string]$targetFile) {
     }
 }
 
+function FollowDownloadFile([string]$url, [string]$targetFile) {
+	if((Test-Path $targetFile)) {
+	    write-host $targetFile "exists, using this download";
+	} else {
+        $webclient = New-Object System.Net.WebClient
+        $webclient.DownloadFile($url,$targetFile)
+    }
+}
+
 function InstallEXE([string]$installer, [string]$Arguments) {
 	Start-Process "`"$installer`"" -ArgumentList $Arguments -Wait
 }
@@ -295,7 +363,6 @@ write-host -fore Yellow "Reviewing Git for Windows..."
 GitForWindowsCheck $gitforwindows_ver
 write-host -fore Green "Git for Windows Review Completed"
 write-host ""
-write-host ""
 write-host -fore Yellow "Reviewing Node.js..."
 NodejsCheck $nodejs_ver
 write-host -fore Green "Node.js Review Completed"
@@ -303,6 +370,10 @@ write-host ""
 write-host -fore Yellow "Reviewing Python..."
 PythonCheck $python_ver
 write-host -fore Green "Python Review Completed"
+write-host ""
+write-host -fore Yellow "Reviewing Visual Studio $visualstudio_ver Edition..."
+VisualStudioCheck $visualstudio_ver $visualstudio_dl
+write-host -fore Green "Reviewing Visual Studio $visualstudio_ver Edition Review Completed"
 write-host ""
 write-host ""
 write-host -fore Cyan "Completed Storj-cli Automated Installion"
