@@ -5,125 +5,156 @@
   Automates the installation of storjshare-cli for Windows only
 .DESCRIPTION
   Automates the installation of storjshare-cli for Windows only
-  
-  Ensure Set-ExecutionPolicy Unrestricted is set before running this
-  Ensure the script is Run as Administrator
-
-  To run double-click
-
-  Functions this performs
-    --Checks for Python version 2.7.11 and installs if it is not installed
-    --Checks for PATH Envrionment variable for Python and creates it if it does not exist
-.NOTES
-  Version:        0.1
-  Author:         Storj Community
-  Creation Date:  06/03/2016
-
 #>
 
 #---------------------------------------------------------[Initialisations]--------------------------------------------------------
 
 $client = New-Object System.Net.WebClient
+$script_version = "0.2 Beta"
 
 #----------------------------------------------------------[Declarations]----------------------------------------------------------
 
-$save_dir=Resolve-Path ~/Downloads
-$python_ver="2.7.11"
-$python_path = "C:\Python27\"
+$save_dir=$env:temp #target_path for downloaded files (Default: %TEMP%)
+
+$nodejs_ver = "4.4.5" #make sure to reference LTS branch version (Default: 4.4.5)
+
+$python_ver="2.7.11" #currently only use version 2 branch (Default: 2.7.11)
+$python_path = "C:\Python27\" #make sure ends with \ (Default: C:\Python27\)
 
 #-----------------------------------------------------------[Functions]------------------------------------------------------------
 
-function InstallMSI($installer) {
-	$Arguments = @()
-	$Arguments += "/i"
-	$Arguments += "`"$installer`""
-	$Arguments += "ALLUSERS=`"1`""
-	$Arguments += "/passive"
+function NodejsCheck([string]$version) {
+    write-host "Checking if Node.js is installed..."
+    If(!(Get-IsProgramInstalled "Node.js")) {
+        write-host "Nodejs $version is not installed."
+        if ([System.IntPtr]::Size -eq 4) {
+            $arch="32-bit"
+            $arch_ver='-x86'
+        } else {
+            $arch="64-bit"
+            $arch_ver='-x64'
+        }
 
-	Start-Process "msiexec.exe" -ArgumentList $Arguments -Wait
-}
-
-function download_file([string]$url, [string]$d) {
-	if(!(Test-Path $d -pathType leaf)) {
-		# get the file
-		write-host "Downloading $url to $d";
-		$client.DownloadFile($url, $d);
-
-        if(!(Test-Path $d -pathType leaf)) {
-		    write-host "Download failed for $url"
-            exit;
+	    $filename = 'node-v' + $version + $arch_ver + '.msi';
+	    $save_path = '' + $save_dir + '\' + $filename;
+        $url='https://nodejs.org/dist/v' + $version + '/' + $filename;
+	    if(!(Test-Path -pathType container $save_dir)) {
+		    write-host -fore red "Save directory " $save_dir " does not exist";
+		    exit;
 	    }
-	}
+
+        write-host "Downloading Node.js LTS ("$arch")" $version "..."
+        DownloadFile $url $save_path
+        write-host "Nodejs downloaded"
+
+	    write-host "Installing Node.js LTS $version..."
+	    InstallMSI $save_path $target_dir
+        
+        If(!(Get-IsProgramInstalled "Node.js")) {
+           write-host -fore red "Node.js did not complete installation successfully...try manually installing it..."
+           exit;
+        }
+
+        write-host "Node.js Installed Successfully"
+    }
     else
     {
-        write-host "Download file" $d "already exists";
+        write-host "Node.js already installed."
+        write-host "Checking version..."
+
+        $version = Get-ProgramVersion( "Node.js" )
+        if(!$version) {
+            write-host -fore red "Node.js Version is Unknown - Error"
+            exit;
+        }
+
+        write-host -fore Green "Node.js Installed Version:" $version
     }
 }
 
-function get-python-ver($version) {
-
-    If(!(Is-Installed "Python")) {
-
+function PythonCheck([string]$version) {
+    write-host "Checking if Python is installed..."
+    If(!(Get-IsProgramInstalled "Python")) {
+        write-host "Python $version is not installed."
         if ([System.IntPtr]::Size -eq 4) {
-            write-host "32-bit OS detected"
-            write-host "Installing 32-bit Python"
+            $arch="32-bit"
             $arch_ver=''
-        }
-        else {
-            write-host "64-bit OS detected"
-            write-host "Installing 64-bit Python"
+        } else {
+            $arch="64-bit"
             $arch_ver='.amd64'
         }
 
 	    $filename = 'python-' + $version + $arch_ver + '.msi';
 	    $save_path = '' + $save_dir + '\' + $filename;
+        $url='http://www.python.org/ftp/python/' + $version + '/' + $filename;
 	    if(!(Test-Path -pathType container $save_dir)) {
-		    write-host -fore red $save_dir " does not exist";
+		    write-host -fore red "Save directory " $save_dir " does not exist";
 		    exit;
 	    }
 
-	    $url='http://www.python.org/ftp/python/' + $version + '/' + $filename;
-	
-        write-host $url
-        download_file $url $save_path
-	    write-host "Installing Python"
+        write-host "Downloading Python ("$arch")" $version "..."
+        DownloadFile $url $save_path
+        write-host "Python downloaded"
+
+	    write-host "Installing Python $version..."
 	    InstallMSI $save_path $target_dir
+        
+        If(!(Get-IsProgramInstalled "Python")) {
+           write-host -fore red "Python did not complete installation successfully...try manually installing it..."
+           exit;
+        }
+
+        write-host "Python Installed Successfully"
     }
     else
     {
-        write-host "Skipping install...Python already installed."
+        write-host "Python already installed."
+        write-host "Checking version..."
+
+        $version = Get-ProgramVersion( "Python" )
+        if(!$version) {
+            write-host -fore red "Python Version is Unknown - Error"
+            exit;
+        }
+
+        write-host -fore Green "Python Installed Version:" $version
+        if($version.Split(".")[0] -gt "2" -Or $version.Split(".")[0] -lt "2") {
+            write-host -fore red "Python version not supported.  Please remove all versions of Python and run the script again."
+            exit;
+        }
     }
 
+    write-host "Checking for Python Environment Path..."
+    $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine")
     $PathasArray=($Env:PATH).split(';')
     If ($PathasArray -contains $python_path -or $PathAsArray -contains $python_path+'\') {
-        write-host $python_path 'already within $ENV:PATH'
+        write-host "Python Environment Path" $python_path 'already within System Environment Path, skipping...'
     }
     else
     {
-        $OldPath=(Get-ItemProperty -Path 'Registry::HKEY_LOCAL_MACHINE\System\CurrentControlSet\Control\Session Manager\Environment' -Name PATH).Path 
-        
-        write-host $python_path[-1]
-
-        $NewPath=$OldPath+';’+$python_path+';'+$python_path+"Scripts\"
-        write-host $NewPath
-        Set-ItemProperty -Path 'Registry::HKEY_LOCAL_MACHINE\System\CurrentControlSet\Control\Session Manager\Environment' -Name PATH –Value $newPath 
+        $OldPath=(Get-ItemProperty -Path 'Registry::HKEY_LOCAL_MACHINE\System\CurrentControlSet\Control\Session Manager\Environment' -Name PATH).Path
+        $NewPath=$OldPath+';’+$python_path;
+        Set-ItemProperty -Path 'Registry::HKEY_LOCAL_MACHINE\System\CurrentControlSet\Control\Session Manager\Environment' -Name PATH –Value $newPath
+        write-host "Python Environment Path Added:" $python_path
     }
+
+    $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine")
+    $PathasArray=($Env:PATH).split(';')
+    $python_path=$python_path+"Scripts\";
+    If ($PathasArray -contains $python_path -or $PathAsArray -contains $python_path+'\') {
+        write-host "Python Environment Path" $python_path 'already within System Environment Path, skipping...'
+    }
+    else
+    {
+        $OldPath=(Get-ItemProperty -Path 'Registry::HKEY_LOCAL_MACHINE\System\CurrentControlSet\Control\Session Manager\Environment' -Name PATH).Path
+        $NewPath=$OldPath+';’+$python_path;
+        Set-ItemProperty -Path 'Registry::HKEY_LOCAL_MACHINE\System\CurrentControlSet\Control\Session Manager\Environment' -Name PATH –Value $newPath
+        write-host "Python Environment Path" $python_path 'already within System Environment Path, skipping...'
+    }
+    $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine")
 }
 
-function get_setuptools {
-	write-host "Installing setuptools"
-	$setuptools_url = "https://bitbucket.org/pypa/setuptools/raw/bootstrap/ez_setup.py"
-	$ez_setup = '' + $save_dir + "\ez_setup.py"
-	download_file $setuptools_url $ez_setup
-	python $ez_setup
-}
-
-Function global:TEST-LocalAdmin() { 
-    Return ([security.principal.windowsprincipal] [security.principal.windowsidentity]::GetCurrent()).isinrole([Security.Principal.WindowsBuiltInRole] "Administrator") 
-}
-
-function Is-Installed( $program ) {
-    
+function Get-IsProgramInstalled([string]$program) {
     $x86 = ((Get-ChildItem "HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall") |
         Where-Object { $_.GetValue( "DisplayName" ) -like "*$program*" } ).Length -gt 0;
 
@@ -133,6 +164,86 @@ function Is-Installed( $program ) {
     return $x86 -or $x64;
 }
 
+function Get-ProgramVersion([string]$program) {
+    $x86 = ((Get-ChildItem "HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall") |
+        Where-Object { $_.GetValue( "DisplayName" ) -like "*$program*" } |
+        Select-Object { $_.GetValue( "DisplayVersion" ) }  )
+
+    $x64 = ((Get-ChildItem "HKLM:\Software\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall") |
+        Where-Object { $_.GetValue( "DisplayName" ) -like "*$program*" } |
+        Select-Object { $_.GetValue( "DisplayVersion" ) }  )
+
+    if ($x86) {
+        $version = $x86 -split "="
+        $version = $version[1].Split("}")[0]
+    } elseif ($x64)  {
+        $version = $x64 -split "="
+        $version = $version[1].Split("}")[0]
+    } else {
+        $version = ""
+    }
+
+    return $version;
+}
+
+function DownloadFile([string]$url, [string]$targetFile) {
+	if((Test-Path $targetFile)) {
+	    write-host $targetFile "exists, using this download";
+	} else {
+        $uri = New-Object "System.Uri" "$url"
+        $request = [System.Net.HttpWebRequest]::Create($uri)
+        $request.set_Timeout(15000) #15 second timeout
+        $response = $request.GetResponse()
+        $totalLength = [System.Math]::Floor($response.get_ContentLength()/1024)
+        $responseStream = $response.GetResponseStream()
+        $targetStream = New-Object -TypeName System.IO.FileStream -ArgumentList $targetFile, Create
+        $buffer = new-object byte[] 10KB
+        $count = $responseStream.Read($buffer,0,$buffer.length)
+        $downloadedBytes = $count
+        while ($count -gt 0) {
+            $targetStream.Write($buffer, 0, $count)
+            $count = $responseStream.Read($buffer,0,$buffer.length)
+            $downloadedBytes = $downloadedBytes + $count
+            Write-Progress -activity "Downloading file '$($url.split('/') | Select -Last 1)'" -status "Downloaded ($([System.Math]::Floor($downloadedBytes/1024))K of $($totalLength)K): " -PercentComplete ((([System.Math]::Floor($downloadedBytes/1024)) / $totalLength)  * 100)
+        }
+        Write-Progress -activity "Finished downloading file '$($url.split('/') | Select -Last 1)'"
+        $targetStream.Flush()
+        $targetStream.Close()
+        $targetStream.Dispose()
+        $responseStream.Dispose()
+    }
+}
+
+function InstallMSI([string]$installer) {
+	$Arguments = @()
+	$Arguments += "/i"
+	$Arguments += "`"$installer`""
+	$Arguments += "ALLUSERS=`"1`""
+	$Arguments += "/passive"
+
+	Start-Process "msiexec.exe" -ArgumentList $Arguments -Wait
+}
+
 #-----------------------------------------------------------[Execution]------------------------------------------------------------
 
-get-python-ver $python_ver
+write-host -fore Cyan "Performing Storj-cli Automated Installation"
+write-host -fore Cyan "Script Version:"$script_version
+write-host -fore Cyan "Github Site: https://github.com/Storj/storj-automation"
+write-host -fore Red "USE AT YOUR OWN RISK"
+write-host ""
+write-host -fore Cyan "Checking for Pre-Requirements..."
+write-host ""
+write-host ""
+write-host -fore Yellow "Reviewing Node.js..."
+NodejsCheck $nodejs_ver
+write-host -fore Green "Node.js Review Completed"
+write-host ""
+write-host -fore Yellow "Reviewing Python..."
+PythonCheck $python_ver
+write-host -fore Green "Python Review Completed"
+write-host ""
+write-host ""
+write-host -fore Cyan "Completed Storj-cli Automated Installion"
+
+#pauses script to show results
+pause

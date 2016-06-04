@@ -1,10 +1,15 @@
 @ECHO OFF
 REM **************************************** 
-REM Automation Menu
-REM Runs Powershells easily
-REM Be sure to run this as an administrator (Right-click Run As Administrator)
+REM Storj-cli Windows Automation Menu
 REM ****************************************
 
-PowerShell.exe -NoProfile -ExecutionPolicy Bypass -Command "& '%~dp0install_storj_cli.ps1.ps1'"
+SET install=%~dp0install_storj_cli.ps1
 
-PAUSE
+IF NOT EXIST "%install%" (
+	ECHO File %install% Does Not Exist
+	PAUSE
+	EXIT
+)
+
+REM Run install_storj_cli.ps1 Power Shell Script
+PowerShell.exe -NoProfile -Command "& {Start-Process PowerShell.exe -ArgumentList '-NoProfile -ExecutionPolicy Bypass -File ""%install%""' -Verb RunAs}"
