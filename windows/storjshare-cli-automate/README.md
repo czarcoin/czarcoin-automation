@@ -1,10 +1,12 @@
 Automates the installation of storjshare-cli for Windows only
 <br/>
 <br/>INSTRUCTIONS:
-<br/>1.) Download ZIP
+<br/>1.) Download ZIP of storjshare-cli-automate
 <br/>2.) Extract ZIP
 <br/>3.) Double-click `automate_storj_cli.bat`
 <br/>4.) Click Yes when prompted by User Account Control (UAC)
+<br/>5.) Reboot when completed
+<br/>6.) [Temp] Follow univseral storjshare-cli instructions
 <br/>
 <br/>COMPATIBILITY:
 <br/>   -PowerShell Version 2 or newer
@@ -12,14 +14,7 @@ Automates the installation of storjshare-cli for Windows only
 <br/>   -Server OS: Windows 2008 or newer
 <br/>
 <br/>TODO:
-<br/>   1) Github for Windows: https://git-for-windows.github.io/ `(Completed)`
-<br/>   2) Node.js LTS 4.4.5 `(Completed)`
-<br/>   3) Python 2.7.11 `(Completed)`
-<br/>   4) Visual Studio Community 2015 Edition: (Custom Install, Select Visual C++ during the installation) `(Completed)`
-<br/>   5) setx GYP_MSVS_VERSION 2015 Environment Variable (making machine instead of user variable) `(preliminary code there, not finished, commented out)`
-<br/>   6) handle reboot
-<br/>
-<br/>LONGER TERM:
+<br/>   0) Handle Reboot
 <br/>   1) Follow the storjshare-cli installation guide: https://github.com/Storj/storjshare-cli#installation
 <br/>   2) Perform Updates of storj-cli
 <br/>   3) Perform uninstall of pre-requirements and storj-cli
