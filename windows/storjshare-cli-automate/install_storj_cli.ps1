@@ -10,7 +10,7 @@
 #---------------------------------------------------------[Initialisations]--------------------------------------------------------
 
 $client = New-Object System.Net.WebClient
-$script_version = "0.4 Beta"
+$script_version = "1.0 Release"
 
 #----------------------------------------------------------[Declarations]----------------------------------------------------------
 
@@ -204,9 +204,9 @@ function PythonCheck([string]$version) {
         $OldPath=(Get-ItemProperty -Path 'Registry::HKEY_LOCAL_MACHINE\System\CurrentControlSet\Control\Session Manager\Environment' -Name PATH).Path
         $NewPath=$OldPath+';’+$python_path;
         Set-ItemProperty -Path 'Registry::HKEY_LOCAL_MACHINE\System\CurrentControlSet\Control\Session Manager\Environment' -Name PATH –Value $newPath
-        write-host "Python Environment Path" $python_path 'already within System Environment Path, skipping...'
+        $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine")
+        write-host "Python Environment Path Added:" $python_path
     }
-    $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine")
 }
 
 function VisualStudioCheck([string]$version, [string]$dl_link) {
@@ -240,8 +240,8 @@ function VisualStudioCheck([string]$version, [string]$dl_link) {
         write-host "Visual Studio Community $version Edition already installed."
         write-host "Checking version..."
 
-        $version = Get-ProgramVersion( "Microsoft Visual Studio Community" )
-        if(!$version) {
+        $version_check = Get-ProgramVersion( "Microsoft Visual Studio Community" )
+        if(!$version_check) {
             write-host -fore red "Visual Studio Community Edition Version is Unknown - Error"
             exit;
         }
@@ -249,21 +249,17 @@ function VisualStudioCheck([string]$version, [string]$dl_link) {
         write-host -fore Green "Visual Studio Community $version Edition Installed"
     }
 
-    <# - Not developed yet -- support for environment variable
     write-host "Checking for Visual Studio Community $version Edition Environment Variable..."
-    $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine")
-    $PathasArray=($Env:PATH).split(';')
-    If ($PathasArray -contains $python_path -or $PathAsArray -contains $python_path+'\') {
-        write-host "Python Environment Path" $python_path 'already within System Environment Path, skipping...'
+    $env:GYP_MSVS_VERSION = [System.Environment]::GetEnvironmentVariable("GYP_MSVS_VERSION","Machine")
+    If ($env:GYP_MSVS_VERSION) {
+        write-host "Visual Studio Community $version Edition Environment Variable (GYP_MSVS_VERSION -" $env:GYP_MSVS_VERSION ") is already set, skipping..."
     }
     else
     {
-        $OldPath=(Get-ItemProperty -Path 'Registry::HKEY_LOCAL_MACHINE\System\CurrentControlSet\Control\Session Manager\Environment' -Name PATH).Path
-        $NewPath=$OldPath+';’+$python_path;
-        Set-ItemProperty -Path 'Registry::HKEY_LOCAL_MACHINE\System\CurrentControlSet\Control\Session Manager\Environment' -Name PATH –Value $newPath
-        write-host "Visual Studio Community $version Edition Environment Variable Added:" $python_path
+        [Environment]::SetEnvironmentVariable("GYP_MSVS_VERSION", $version, "Machine")
+        $env:GYP_MSVS_VERSION = [System.Environment]::GetEnvironmentVariable("GYP_MSVS_VERSION","Machine")
+        write-host "Visual Studio Community $version Edition Environment Variable Added: GYP_MSVS_VERSION -" $env:GYP_MSVS_VERSION
     }
-    #>
 }
 
 function Get-IsProgramInstalled([string]$program) {
@@ -376,6 +372,8 @@ VisualStudioCheck $visualstudio_ver $visualstudio_dl
 write-host -fore Green "Reviewing Visual Studio $visualstudio_ver Edition Review Completed"
 write-host ""
 write-host ""
+write-host -fore Cyan "Completed Pre-Requirements Check"
+write-host -fore Red "PLEASE REBOOT BEFORE PROCEEDING TO INSTALL STORJSHARE-CLI!"
 write-host -fore Cyan "Completed Storj-cli Automated Installion"
 
 #pauses script to show results
