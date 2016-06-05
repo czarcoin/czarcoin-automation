@@ -10,7 +10,7 @@
 #---------------------------------------------------------[Initialisations]--------------------------------------------------------
 
 $client=New-Object System.Net.WebClient
-$script_version="1.1 Release"
+$script_version="1.2 Release"
 $global:reboot_needed=0
 
 #----------------------------------------------------------[Declarations]----------------------------------------------------------
@@ -267,8 +267,9 @@ function storjshare-cliCheck() {
         write-host "Installing storjshare-cli (latest version released)..."
 
         $Arguments = "install -g storjshare-cli"
+        $result=(UseNPM $Arguments| Where-Object {$_ -like '*ERR!*'})
 
-        if ((UseNPM $Arguments| Where-Object {$_ -like '*ERR*'}).Length -gt 0) {
+        if ($result.Length -gt 0) {
             ErrorOut "storjshare-cli did not complete installation successfully...try manually installing it..."
         }
         
