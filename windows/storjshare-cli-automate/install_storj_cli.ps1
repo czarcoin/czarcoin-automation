@@ -9,8 +9,9 @@
 
 #---------------------------------------------------------[Initialisations]--------------------------------------------------------
 
-$client = New-Object System.Net.WebClient
-$script_version = "1.0 Release"
+$client=New-Object System.Net.WebClient
+$script_version="1.1 Release"
+$global:reboot_needed=0
 
 #----------------------------------------------------------[Declarations]----------------------------------------------------------
 
@@ -44,8 +45,7 @@ function GitForWindowsCheck([string]$version) {
 	    $save_path = '' + $save_dir + '\' + $filename;
         $url='https://github.com/git-for-windows/git/releases/download/v' + $version + '.windows.1/' + $filename;
 	    if(!(Test-Path -pathType container $save_dir)) {
-		    write-host -fore red "Save directory " $save_dir " does not exist";
-		    exit;
+		    ErrorOut "Save directory " $save_dir " does not exist";
 	    }
 
         write-host "Downloading Git for Windows ("$arch")" $version "..."
@@ -57,10 +57,10 @@ function GitForWindowsCheck([string]$version) {
 	    InstallEXE $save_path $Arguments
         
         If(!(Get-IsProgramInstalled "Git")) {
-           write-host -fore red "Git for Windows did not complete installation successfully...try manually installing it..."
-           exit;
+           ErrorOut "Git for Windows did not complete installation successfully...try manually installing it..."
         }
 
+        $global:reboot_needed=1
         write-host -fore Green "Git for Windows Installed Successfully"
     }
     else
@@ -70,8 +70,7 @@ function GitForWindowsCheck([string]$version) {
 
         $version = Get-ProgramVersion( "Git" )
         if(!$version) {
-            write-host -fore red "Git for Windows Version is Unknown - Error"
-            exit;
+            ErrorOut "Git for Windows Version is Unknown - Error"
         }
 
         write-host -fore Green "Git for Windows Installed Version:" $version
@@ -94,8 +93,7 @@ function NodejsCheck([string]$version) {
 	    $save_path = '' + $save_dir + '\' + $filename;
         $url='https://nodejs.org/dist/v' + $version + '/' + $filename;
 	    if(!(Test-Path -pathType container $save_dir)) {
-		    write-host -fore red "Save directory " $save_dir " does not exist";
-		    exit;
+		    ErrorOut "Save directory " $save_dir " does not exist";
 	    }
 
         write-host "Downloading Node.js LTS ("$arch")" $version "..."
@@ -106,10 +104,10 @@ function NodejsCheck([string]$version) {
 	    InstallMSI $save_path
         
         If(!(Get-IsProgramInstalled "Node.js")) {
-           write-host -fore red "Node.js did not complete installation successfully...try manually installing it..."
-           exit;
+           ErrorOut "Node.js did not complete installation successfully...try manually installing it..."
         }
 
+        $global:reboot_needed=1
         write-host -fore Green "Node.js Installed Successfully"
     }
     else
@@ -119,8 +117,7 @@ function NodejsCheck([string]$version) {
 
         $version = Get-ProgramVersion( "Node.js" )
         if(!$version) {
-            write-host -fore red "Node.js Version is Unknown - Error"
-            exit;
+            ErrorOut "Node.js Version is Unknown - Error"
         }
 
         write-host -fore Green "Node.js Installed Version:" $version
@@ -143,8 +140,7 @@ function PythonCheck([string]$version) {
 	    $save_path = '' + $save_dir + '\' + $filename;
         $url='http://www.python.org/ftp/python/' + $version + '/' + $filename;
 	    if(!(Test-Path -pathType container $save_dir)) {
-		    write-host -fore red "Save directory " $save_dir " does not exist";
-		    exit;
+		    ErrorOut "Save directory " $save_dir " does not exist";
 	    }
 
         write-host "Downloading Python ("$arch")" $version "..."
@@ -155,10 +151,10 @@ function PythonCheck([string]$version) {
 	    InstallMSI $save_path
         
         If(!(Get-IsProgramInstalled "Python")) {
-           write-host -fore red "Python did not complete installation successfully...try manually installing it..."
-           exit;
+           ErrorOut "Python did not complete installation successfully...try manually installing it..."
         }
 
+        $global:reboot_needed=1
         write-host -fore Green "Python Installed Successfully"
     }
     else
@@ -168,14 +164,12 @@ function PythonCheck([string]$version) {
 
         $version = Get-ProgramVersion( "Python" )
         if(!$version) {
-            write-host -fore red "Python Version is Unknown - Error"
-            exit;
+            ErrorOut "Python Version is Unknown - Error"
         }
 
         write-host -fore Green "Python Installed Version:" $version
         if($version.Split(".")[0] -gt "2" -Or $version.Split(".")[0] -lt "2") {
-            write-host -fore red "Python version not supported.  Please remove all versions of Python and run the script again."
-            exit;
+            ErrorOut "Python version not supported.  Please remove all versions of Python and run the script again."
         }
     }
 
@@ -191,6 +185,7 @@ function PythonCheck([string]$version) {
         $NewPath=$OldPath+';’+$python_path;
         Set-ItemProperty -Path 'Registry::HKEY_LOCAL_MACHINE\System\CurrentControlSet\Control\Session Manager\Environment' -Name PATH –Value $newPath
         write-host "Python Environment Path Added:" $python_path
+        $global:reboot_needed=1
     }
 
     $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine")
@@ -206,6 +201,7 @@ function PythonCheck([string]$version) {
         Set-ItemProperty -Path 'Registry::HKEY_LOCAL_MACHINE\System\CurrentControlSet\Control\Session Manager\Environment' -Name PATH –Value $newPath
         $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine")
         write-host "Python Environment Path Added:" $python_path
+        $global:reboot_needed=1
     }
 }
 
@@ -216,8 +212,7 @@ function VisualStudioCheck([string]$version, [string]$dl_link) {
         $filename = 'vs_community_ENU.exe';
 	    $save_path = '' + $save_dir + '\' + $filename;
 	    if(!(Test-Path -pathType container $save_dir)) {
-		    write-host -fore red "Save directory " $save_dir " does not exist";
-		    exit;
+		    ErrorOut "Save directory " $save_dir " does not exist";
 	    }
 
         write-host "Downloading Visual Studio Community $version Edition..."
@@ -229,10 +224,10 @@ function VisualStudioCheck([string]$version, [string]$dl_link) {
 	    InstallEXE $save_path $Arguments
 
         If(!(Get-IsProgramInstalled "Microsoft Visual Studio Community")) {
-           write-host -fore red "Visual Studio Community $version Edition did not complete installation successfully...try manually installing it..."
-           exit;
+           ErrorOut "Visual Studio Community $version Edition did not complete installation successfully...try manually installing it..."
         }
 
+        $global:reboot_needed=1
         write-host -fore Green "Visual Studio Community $version Edition Installed"
     }
     else
@@ -242,8 +237,7 @@ function VisualStudioCheck([string]$version, [string]$dl_link) {
 
         $version_check = Get-ProgramVersion( "Microsoft Visual Studio Community" )
         if(!$version_check) {
-            write-host -fore red "Visual Studio Community Edition Version is Unknown - Error"
-            exit;
+            ErrorOut "Visual Studio Community Edition Version is Unknown - Error"
         }
 
         write-host -fore Green "Visual Studio Community $version Edition Installed"
@@ -259,6 +253,40 @@ function VisualStudioCheck([string]$version, [string]$dl_link) {
         [Environment]::SetEnvironmentVariable("GYP_MSVS_VERSION", $version, "Machine")
         $env:GYP_MSVS_VERSION = [System.Environment]::GetEnvironmentVariable("GYP_MSVS_VERSION","Machine")
         write-host "Visual Studio Community $version Edition Environment Variable Added: GYP_MSVS_VERSION -" $env:GYP_MSVS_VERSION
+        $global:reboot_needed=1
+    }
+}
+
+function storjshare-cliCheck() {
+    write-host "Checking if storjshare-cli is installed..."
+
+    $Arguments = "list -g"
+    $output=(UseNPM $Arguments| Where-Object {$_ -like '*storjshare-cli*'})
+    if (!$output.Length -gt 0) {
+        write-host "storjshare-cli is not installed."
+        write-host "Installing storjshare-cli (latest version released)..."
+
+        $Arguments = "install -g storjshare-cli"
+
+        if ((UseNPM $Arguments| Where-Object {$_ -like '*ERR*'}).Length -gt 0) {
+            ErrorOut "storjshare-cli did not complete installation successfully...try manually installing it..."
+        }
+        
+        write-host -fore Green "storjshare-cli Installed Successfully"
+    }
+    else
+    {
+        write-host "storjshare-cli already installed."
+        write-host "Checking version..."
+
+        $pos=$output.IndexOf("storjshare-cli@")
+
+        $version = $output.Substring($pos+15)
+        if(!$version) {
+            ErrorOut "storjshare-cli Version is Unknown - Error"
+        }
+
+        write-host -fore Green "storjshare-cli Installed Version:" $version
     }
 }
 
@@ -345,6 +373,41 @@ function InstallMSI([string]$installer) {
 	Start-Process "msiexec.exe" -ArgumentList $Arguments -Wait
 }
 
+function UseNPM([string]$Arguments) {
+	$filename = 'npm_output.log';
+	$save_path = '' + $save_dir + '\' + $filename;
+	if(!(Test-Path -pathType container $save_dir)) {
+	    ErrorOut "Save directory " $save_dir " does not exist";
+	}
+	
+    Start-Process "npm" -ArgumentList $Arguments -RedirectStandardOutput "$save_path" -Wait
+    
+    if(!(Test-Path $save_path)) {
+        ErrorOut "npm command $Arguments failed to execute...try manually running it..."
+    }
+    
+    $results=(Get-Content -Path "$save_path")
+    Remove-Item "$save_path"
+    
+    return $results
+}
+
+function ErrorOut([string]$message) {
+    write-host -fore Red $message
+    pause
+    exit;
+}
+
+function CheckRebootNeeded() {
+	if($global:reboot_needed -eq 1) {
+        write-host -fore Red "~~~PLEASE REBOOT BEFORE PROCEEDING~~~"
+        write-host -fore White "After the reboot, re-launch this script to complete the installation"
+        ErrorOut "~~~PLEASE REBOOT BEFORE PROCEEDING~~~"
+    } else {
+        write-host -fore Green "No Reboot Needed, continuing on with script"
+    }
+}
+
 #-----------------------------------------------------------[Execution]------------------------------------------------------------
 
 write-host -fore Cyan "Performing Storj-cli Automated Installation"
@@ -369,11 +432,18 @@ write-host -fore Green "Python Review Completed"
 write-host ""
 write-host -fore Yellow "Reviewing Visual Studio $visualstudio_ver Edition..."
 VisualStudioCheck $visualstudio_ver $visualstudio_dl
-write-host -fore Green "Reviewing Visual Studio $visualstudio_ver Edition Review Completed"
+write-host -fore Green "Visual Studio $visualstudio_ver Edition Review Completed"
 write-host ""
 write-host ""
 write-host -fore Cyan "Completed Pre-Requirements Check"
-write-host -fore Red "PLEASE REBOOT BEFORE PROCEEDING TO INSTALL STORJSHARE-CLI!"
+write-host ""
+checkRebootNeeded
+write-host ""
+write-host -fore Yellow "Reviewing storjshare-cli..."
+storjshare-cliCheck
+write-host -fore Green "storjshare-cli Review Completed"
+write-host ""
+write-host ""
 write-host -fore Cyan "Completed Storj-cli Automated Installion"
 
 #pauses script to show results

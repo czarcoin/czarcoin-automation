@@ -14,9 +14,7 @@ Automates the installation of storjshare-cli for Windows only
 <br/>   -Server OS: Windows 2008 or newer
 <br/>
 <br/>TODO:
-<br/>   0) Handle Reboot
-<br/>   1) Follow the storjshare-cli installation guide: https://github.com/Storj/storjshare-cli#installation
-<br/>   2) Perform Updates of storj-cli
-<br/>   3) Perform uninstall of pre-requirements and storj-cli
-<br/>   4) Install storj-cli as a service(s)
-<br/>   5) Modify configuration of instance
+<br/>   -Perform Updates of storj-cli
+<br/>   -Perform uninstall of pre-requirements and storj-cli
+<br/>   -Install storj-cli as a service(s)
+<br/>   -Modify configuration of instance
