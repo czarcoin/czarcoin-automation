@@ -12,4 +12,4 @@ IF NOT EXIST "%install%" (
 )
 
 REM Run install_storj_cli.ps1 Power Shell Script
-PowerShell.exe -NoProfile -Command "& {Start-Process PowerShell.exe -ArgumentList '-NoProfile -ExecutionPolicy Bypass -File ""%install%""' -Verb RunAs}"
+PowerShell.exe -NoProfile -Command "& {Start-Process PowerShell.exe -ArgumentList '-NoProfile -ExecutionPolicy Bypass ""%install%""' -Verb RunAs}"
