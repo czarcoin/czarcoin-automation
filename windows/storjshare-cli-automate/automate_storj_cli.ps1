@@ -50,6 +50,10 @@ $python_path = "C:\Python27\" #make sure ends with \ (Default: C:\Python27\)
 $visualstudio_ver="2015" # currently only supports 2015 Edition (Default: 2015)
 $visualstudio_dl="http://go.microsoft.com/fwlink/?LinkID=626924"  #  link to 2015 download   (Default: http://go.microsoft.com/fwlink/?LinkID=626924)
 
+#Handles EXE Security Warnings
+$Lowriskregpath ="HKCU:\Software\Microsoft\Windows\Currentversion\Policies\Associations"
+$Lowriskregfile = "LowRiskFileTypes"
+$LowRiskFileTypes = ".exe"
 #-----------------------------------------------------------[Functions]------------------------------------------------------------
 
 function handleParameters() {
@@ -452,9 +456,20 @@ function FollowDownloadFile([string]$url, [string]$targetFile) {
     }
 }
 
+function AddLowRiskFiles() {
+	New-Item -Path $Lowriskregpath -Erroraction SilentlyContinue |out-null
+	New-ItemProperty $Lowriskregpath -Name $Lowriskregfile -Value $LowRiskFileTypes -PropertyType String -ErrorAction SilentlyContinue |out-null
+}
+
+function RemoveLowRiskFiles() {
+	Remove-ItemProperty -Path $Lowriskregpath -Name $Lowriskregfile -ErrorAction SilentlyContinue
+}
+
 function InstallEXE([string]$installer, [string]$Arguments) {
 	Unblock-File $installer
+	AddLowRiskFiles
 	Start-Process "`"$installer`"" -ArgumentList $Arguments -Wait
+	RemoveLowRiskFiles
 }
 
 function InstallMSI([string]$installer) {
