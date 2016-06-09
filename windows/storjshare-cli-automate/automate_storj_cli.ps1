@@ -553,6 +553,4 @@ LogWrite ""
 LogWrite ""
 LogWrite -color Cyan "Completed Storj-cli Automated Installion"
 
-WaitUser
-
 ErrorOut -code $global:return_code
