@@ -11,6 +11,7 @@ Automates the installation of storjshare-cli for Windows only
 <br/>
 <br/>COMPATIBILITY:
 <br/>   -PowerShell Version 2 or newer
+<br/>   -Administrator rights are required
 <br/>   -Client OS: Windows 7 or newer
 <br/>   -Server OS: Windows 2008 or newer
 <br/>
