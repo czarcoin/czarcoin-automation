@@ -257,7 +257,7 @@ function PythonCheck([string]$version) {
     else
     {
         $OldPath=(Get-ItemProperty -Path 'Registry::HKEY_LOCAL_MACHINE\System\CurrentControlSet\Control\Session Manager\Environment' -Name PATH).Path
-        $NewPath=$OldPath+';’+$python_path;
+        $NewPath=$OldPath+';'+$python_path;
         Set-ItemProperty -Path 'Registry::HKEY_LOCAL_MACHINE\System\CurrentControlSet\Control\Session Manager\Environment' -Name PATH -Value $newPath
         LogWrite "Python Environment Path Added: $python_path"
         $global:reboot_needed=true
@@ -272,7 +272,7 @@ function PythonCheck([string]$version) {
     else
     {
         $OldPath=(Get-ItemProperty -Path 'Registry::HKEY_LOCAL_MACHINE\System\CurrentControlSet\Control\Session Manager\Environment' -Name PATH).Path
-        $NewPath=$OldPath+';’+$python_path;
+        $NewPath=$OldPath+';'+$python_path;
         Set-ItemProperty -Path 'Registry::HKEY_LOCAL_MACHINE\System\CurrentControlSet\Control\Session Manager\Environment' -Name PATH -Value $newPath
         $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine")
         LogWrite "Python Environment Path Added: $python_path"
