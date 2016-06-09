@@ -1,4 +1,4 @@
-@ECHO OFF
+@ECHO OFF\r\n
 REM **************************************** 
 REM Storj-cli Windows Automation Menu
 REM ****************************************
