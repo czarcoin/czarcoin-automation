@@ -91,7 +91,11 @@ Function LogWrite([string]$logstring,[string]$color) {
 
 function ErrorOut([string]$message,[int]$code=$global:error_install_failure) {
     LogWrite -color Red $message
-    LogWrite -color Red "Returning Error Code: $code"
+    
+    if($silent) {
+    	LogWrite -color Red "Returning Error Code: $code"
+    }
+    
     WaitUser
     exit $code;
 }
@@ -533,6 +537,6 @@ LogWrite ""
 LogWrite ""
 LogWrite -color Cyan "Completed Storj-cli Automated Installion"
 
-LogWrite -color Cyan "Returning Error Code: $global:return_code"
 WaitUser
-exit $global:return_code
+
+ErrorOut -code $global:return_code
