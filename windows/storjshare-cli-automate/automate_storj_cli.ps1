@@ -453,6 +453,7 @@ function FollowDownloadFile([string]$url, [string]$targetFile) {
 }
 
 function InstallEXE([string]$installer, [string]$Arguments) {
+	Unblock-File $installer
 	Start-Process "`"$installer`"" -ArgumentList $Arguments -Wait
 }
 
