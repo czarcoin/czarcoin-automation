@@ -445,7 +445,7 @@ function DownloadFile([string]$url, [string]$targetFile) {
 
 function FollowDownloadFile([string]$url, [string]$targetFile) {
 	if((Test-Path $targetFile)) {
-	    LogWrite $targetFile "exists, using this download";
+	    LogWrite "$targetFile exists, using this download";
 	} else {
         $webclient = New-Object System.Net.WebClient
         $webclient.DownloadFile($url,$targetFile)
