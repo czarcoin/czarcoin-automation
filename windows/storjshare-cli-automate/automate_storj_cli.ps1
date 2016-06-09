@@ -35,7 +35,7 @@ $global:error_success_reboot_required=3010  #this is success, but requests for r
 $global:return_code=$global:error_success #default success
 
 #----------------------------------------------------------[Declarations]----------------------------------------------------------
-$script_version="1.4 Release" # Script version
+$script_version="1.5 Release" # Script version
 
 $save_dir=$env:temp #path for downloaded files (Default: %TEMP%)
 $log_file='' + $save_dir + '\' + 'automate_storj_cli.log'; #outputs everything to a file if -silent is used, instead of the console
@@ -135,7 +135,7 @@ function GitForWindowsCheck([string]$version) {
            ErrorOut "Git for Windows did not complete installation successfully...try manually installing it..."
         }
 
-        $global:reboot_needed=true
+        $global:reboot_needed="true"
         LogWrite -color Green "Git for Windows Installed Successfully"
     }
     else
@@ -182,7 +182,7 @@ function NodejsCheck([string]$version) {
            ErrorOut "Node.js did not complete installation successfully...try manually installing it..."
         }
 
-        $global:reboot_needed=true
+        $global:reboot_needed="true"
         LogWrite -color Green "Node.js Installed Successfully"
     }
     else
@@ -229,7 +229,7 @@ function PythonCheck([string]$version) {
            ErrorOut "Python did not complete installation successfully...try manually installing it..."
         }
 
-        $global:reboot_needed=true
+        $global:reboot_needed="true"
         LogWrite -color Green "Python Installed Successfully"
     }
     else
@@ -260,7 +260,7 @@ function PythonCheck([string]$version) {
         $NewPath=$OldPath+';'+$python_path;
         Set-ItemProperty -Path 'Registry::HKEY_LOCAL_MACHINE\System\CurrentControlSet\Control\Session Manager\Environment' -Name PATH -Value $newPath
         LogWrite "Python Environment Path Added: $python_path"
-        $global:reboot_needed=true
+        $global:reboot_needed="true"
     }
 
     $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine")
@@ -276,7 +276,7 @@ function PythonCheck([string]$version) {
         Set-ItemProperty -Path 'Registry::HKEY_LOCAL_MACHINE\System\CurrentControlSet\Control\Session Manager\Environment' -Name PATH -Value $newPath
         $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine")
         LogWrite "Python Environment Path Added: $python_path"
-        $global:reboot_needed=true
+        $global:reboot_needed="true"
     }
 }
 
@@ -302,7 +302,7 @@ function VisualStudioCheck([string]$version, [string]$dl_link) {
            ErrorOut "Visual Studio Community $version Edition did not complete installation successfully...try manually installing it..."
         }
 
-        $global:reboot_needed=true
+        $global:reboot_needed="true"
         LogWrite -color Green "Visual Studio Community $version Edition Installed"
     }
     else
@@ -328,7 +328,7 @@ function VisualStudioCheck([string]$version, [string]$dl_link) {
         [Environment]::SetEnvironmentVariable("GYP_MSVS_VERSION", $version, "Machine")
         $env:GYP_MSVS_VERSION = [System.Environment]::GetEnvironmentVariable("GYP_MSVS_VERSION","Machine")
         LogWrite "Visual Studio Community $version Edition Environment Variable Added: GYP_MSVS_VERSION - $env:GYP_MSVS_VERSION"
-        $global:reboot_needed=true
+        $global:reboot_needed="true"
     }
 }
 
@@ -390,11 +390,11 @@ function Get-IsProgramInstalled([string]$program) {
 }
 
 function Get-ProgramVersion([string]$program) {
-    $x86 = ((Get-ChildItem "HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall") |
+    $x86 = ((Get-ChildItem  -ErrorAction SilentlyContinue "HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall") |
         Where-Object { $_.GetValue( "DisplayName" ) -like "*$program*" } |
         Select-Object { $_.GetValue( "DisplayVersion" ) }  )
 
-    $x64 = ((Get-ChildItem "HKLM:\Software\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall") |
+    $x64 = ((Get-ChildItem  -ErrorAction SilentlyContinue "HKLM:\Software\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall") |
         Where-Object { $_.GetValue( "DisplayName" ) -like "*$program*" } |
         Select-Object { $_.GetValue( "DisplayVersion" ) }  )
 
@@ -413,7 +413,7 @@ function Get-ProgramVersion([string]$program) {
 
 function DownloadFile([string]$url, [string]$targetFile) {
 	if((Test-Path $targetFile)) {
-	    LogWrite $targetFile "exists, using this download";
+	    LogWrite "$targetFile exists, using this download";
 	} else {
         $uri = New-Object "System.Uri" "$url"
         $request = [System.Net.HttpWebRequest]::Create($uri)
@@ -458,6 +458,7 @@ function InstallMSI([string]$installer) {
 	$Arguments += "`"$installer`""
 	$Arguments += "ALLUSERS=`"1`""
 	$Arguments += "/passive"
+	$Arguments += "/norestart"
 
 	Start-Process "msiexec.exe" -ArgumentList $Arguments -Wait
 }
