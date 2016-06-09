@@ -35,7 +35,7 @@ $global:error_success_reboot_required=3010  #this is success, but requests for r
 $global:return_code=$global:error_success #default success
 
 #----------------------------------------------------------[Declarations]----------------------------------------------------------
-$script_version="1.5 Release" # Script version
+$script_version="1.6 Release" # Script version
 
 $save_dir=$env:temp #path for downloaded files (Default: %TEMP%)
 $log_file='' + $save_dir + '\' + 'automate_storj_cli.log'; #outputs everything to a file if -silent is used, instead of the console
