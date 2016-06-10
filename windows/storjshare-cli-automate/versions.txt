@@ -1,3 +1,0 @@
-Git for Windows = 2.8.3
-Node.js = 4.4.5
-Python = 2.7.11
