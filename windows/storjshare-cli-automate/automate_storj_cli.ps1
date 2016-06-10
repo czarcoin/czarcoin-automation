@@ -2,9 +2,13 @@
 #Requires -RunAsAdministrator
 <#
 .SYNOPSIS
-  Automates the installation of storjshare-cli for Windows only
+  Automates the management of storjshare-cli for Windows only
 .DESCRIPTION
-  Automates the installation of storjshare-cli for Windows only
+  Automates the management of storjshare-cli for Windows only
+
+  This checks for pre-req software
+  Then it checks for storjshare-cli
+  Then it updates storjshare-cli
 
   To deploy silently use the following command
   PowerShell.exe -NoProfile -Command "& {Start-Process PowerShell.exe -ArgumentList '-NoProfile -ExecutionPolicy Bypass ""automate_storj_cli.ps1"" -silent' -Verb RunAs}"
@@ -26,6 +30,7 @@ param(
 
 #---------------------------------------------------------[Initialisations]--------------------------------------------------------
 
+$global:script_version="2.0 Release" # Script version
 $global:reboot_needed=""
 $global:error_success=0  #this is success
 $global:error_invalid_parameter=87 #this is failiure, invalid parameters referenced
@@ -35,7 +40,7 @@ $global:error_success_reboot_required=3010  #this is success, but requests for r
 $global:return_code=$global:error_success #default success
 
 #----------------------------------------------------------[Declarations]----------------------------------------------------------
-$script_version="1.7 Release" # Script version
+
 
 $save_dir=$env:temp #path for downloaded files (Default: %TEMP%)
 $log_file='' + $save_dir + '\' + 'automate_storj_cli.log'; #outputs everything to a file if -silent is used, instead of the console
@@ -114,8 +119,7 @@ function WaitUser() {
 function GitForWindowsCheck([string]$version) {
     LogWrite "Checking if Git for Windows is installed..."
     If(!(Get-IsProgramInstalled "Git")) {
-        $message="Git for Windows $version is not installed."
-        LogWrite $message
+        LogWrite "Git for Windows $version is not installed."
         if ([System.IntPtr]::Size -eq 4) {
             $arch="32-bit"
             $arch_ver='-32-bit'
@@ -148,15 +152,61 @@ function GitForWindowsCheck([string]$version) {
     }
     else
     {
-        LogWrite "Git for Windows already installed."
+        LogWrite "Git for Windows is already installed."
         LogWrite "Checking version..."
 
-        $version = Get-ProgramVersion( "Git" )
-        if(!$version) {
+        $installed_version = Get-ProgramVersion( "Git" )
+        if(!$installed_version) {
             ErrorOut "Git for Windows Version is Unknown - Error"
         }
 
-        LogWrite -color Green "Git for Windows Installed Version: $version"
+        $result = CompareVersions $installed_version $gitforwindows_ver
+        if($result -eq "-2") {
+            ErrorOut "Unable to match Git for Windows version (Installed Version: $installed_version / Requested Version: $gitforwindows_ver)"
+        }
+
+        if($result -eq 0)
+        {
+            LogWrite "Git for Windows is already updated. Skipping..."
+        } elseif($result -eq 1) {
+            LogWrite "Git for Windows is newer than the recommended version. Skipping..."
+        } else {
+            LogWrite "Git for Windows is out of date."
+            
+            LogWrite -Color Cyan "Git for Windows $installed_version will be updated to $gitforwindows_ver..."
+            if ([System.IntPtr]::Size -eq 4) {
+                $arch="32-bit"
+                $arch_ver='-32-bit'
+            } else {
+                $arch="64-bit"
+                $arch_ver='-64-bit'
+            }
+
+    	    $filename = 'Git-' + $gitforwindows_ver + $arch_ver + '.exe';
+	        $save_path = '' + $save_dir + '\' + $filename;
+            $url='https://github.com/git-for-windows/git/releases/download/v' + $gitforwindows_ver + '.windows.1/' + $filename;
+	        if(!(Test-Path -pathType container $save_dir)) {
+		        ErrorOut "Save directory $save_dir does not exist"
+	        }
+
+            LogWrite "Downloading Git for Windows ($arch) $gitforwindows_ver..."
+            DownloadFile $url $save_path
+            LogWrite "Git for Windows downloaded"
+
+	        LogWrite "Installing Git for Windows $gitforwindows_ver..."
+            $Arguments = "/SILENT /COMPONENTS=""icons,ext\reg\shellhere,assoc,assoc_sh"""
+	        InstallEXE $save_path $Arguments
+        
+            If(!(Get-IsProgramInstalled "Git")) {
+                ErrorOut "Git for Windows did not complete installation successfully...try manually updating it..."
+            }
+
+            $global:reboot_needed="true"
+            LogWrite -color Green "Git for Windows Updated Successfully"
+            $installed_version = $gitforwindows_ver            
+        }
+
+        LogWrite -color Green "Git for Windows Installed Version: $installed_version"
     }
 }
 
@@ -198,12 +248,56 @@ function NodejsCheck([string]$version) {
         LogWrite "Node.js already installed."
         LogWrite "Checking version..."
 
-        $version = Get-ProgramVersion( "Node.js" )
+        $installed_version = Get-ProgramVersion( "Node.js" )
         if(!$version) {
             ErrorOut "Node.js Version is Unknown - Error"
         }
 
-        LogWrite -color Green "Node.js Installed Version: $version"
+        $result = CompareVersions $installed_version $nodejs_ver
+        if($result -eq "-2") {
+            ErrorOut "Unable to match Node.js version (Installed Version: $installed_version / Requested Version: $nodejs_ver)"
+        }
+
+        if($result -eq 0)
+        {
+            LogWrite "Node.js is already updated. Skipping..."
+        } elseif($result -eq 1) {
+            LogWrite "Node.js is newer than the recommended version. Skipping..."
+        } else {
+            LogWrite "Node.js is out of date."
+            LogWrite -Color Cyan "Node.js $installed_version will be updated to $nodejs_ver..."
+            if ([System.IntPtr]::Size -eq 4) {
+                $arch="32-bit"
+                $arch_ver='-x86'
+            } else {
+                $arch="64-bit"
+                $arch_ver='-x64'
+            }
+
+	        $filename = 'node-v' + $nodejs_ver + $arch_ver + '.msi';
+	        $save_path = '' + $save_dir + '\' + $filename;
+            $url='https://nodejs.org/dist/v' + $nodejs_ver + '/' + $filename;
+	        if(!(Test-Path -pathType container $save_dir)) {
+		        ErrorOut "Save directory $save_dir does not exist";
+	        }
+
+            LogWrite "Downloading Node.js LTS ($arch) $nodejs_ver..."
+            DownloadFile $url $save_path
+            LogWrite "Nodejs downloaded"
+
+	        LogWrite "Installing Node.js LTS $nodejs_ver..."
+	        InstallMSI $save_path
+        
+            If(!(Get-IsProgramInstalled "Node.js")) {
+               ErrorOut "Node.js did not complete installation successfully...try manually updating it..."
+            }
+
+            $global:reboot_needed="true"
+            LogWrite -color Green "Node.js Updated Successfully"
+            $installed_version = $nodejs_ver
+        }
+
+        LogWrite -color Green "Node.js Installed Version: $installed_version"
     }
 }
 
@@ -245,15 +339,61 @@ function PythonCheck([string]$version) {
         LogWrite "Python already installed."
         LogWrite "Checking version..."
 
-        $version = Get-ProgramVersion( "Python" )
-        if(!$version) {
+        $installed_version = Get-ProgramVersion( "Python" )
+        $installed_version = $installed_version.Substring(0,$installed_version.Length-3)
+        if(!$installed_version) {
             ErrorOut "Python Version is Unknown - Error"
         }
 
-        LogWrite -color Green "Python Installed Version: $version"
-        if($version.Split(".")[0] -gt "2" -Or $version.Split(".")[0] -lt "2") {
+        if($installed_version.Split(".")[0] -gt "2" -Or $installed_version.Split(".")[0] -lt "2") {
             ErrorOut "Python version not supported.  Please remove all versions of Python and run the script again."
         }
+
+        $result = CompareVersions $installed_version $python_ver
+        if($result -eq "-2") {
+            ErrorOut "Unable to match Python version (Installed Version: $installed_version / Requested Version: $python_ver)"
+        }
+
+        if($result -eq 0)
+        {
+            LogWrite "Python is already updated. Skipping..."
+        } elseif($result -eq 1) {
+            LogWrite "Python is newer than the recommended version. Skipping..."
+        } else {
+            LogWrite "Python is out of date."
+            LogWrite -Color Cyan "Python $installed_version will be updated to $python_ver..."
+            if ([System.IntPtr]::Size -eq 4) {
+                $arch="32-bit"
+                $arch_ver=''
+            } else {
+                $arch="64-bit"
+                $arch_ver='.amd64'
+            }
+
+	        $filename = 'python-' + $python_ver + $arch_ver + '.msi';
+	        $save_path = '' + $save_dir + '\' + $filename;
+            $url='http://www.python.org/ftp/python/' + $python_ver + '/' + $filename;
+	        if(!(Test-Path -pathType container $save_dir)) {
+		        ErrorOut "Save directory $save_dir does not exist";
+	        }
+
+            LogWrite "Downloading Python ($arch) $python_ver..."
+            DownloadFile $url $save_path
+            LogWrite "Python downloaded"
+
+	        LogWrite "Installing Python $python_ver..."
+	        InstallMSI $save_path
+        
+            If(!(Get-IsProgramInstalled "Python")) {
+               ErrorOut "Python did not complete installation successfully...try manually installing it..."
+            }
+
+            $global:reboot_needed="true"
+            LogWrite -color Green "Python Updated Successfully"
+            $installed_version=$python_ver
+        }
+
+        LogWrite -color Green "Python Installed Version: $installed_version"
     }
 
     LogWrite "Checking for Python Environment Path..."
@@ -374,7 +514,25 @@ function storjshare-cliCheck() {
     else
     {
         LogWrite "storjshare-cli already installed."
-        LogWrite "Checking version..."
+
+        LogWrite -color Cyan "Performing storjshare-cli Update..."
+
+        $Arguments = "update -g storjshare-cli"
+        $result=(UseNPM $Arguments| Where-Object {$_ -like '*ERR!*'})
+
+        #write npm logs to log file if in silent mode
+        if($silent) {
+            LogWrite "npm $Arguments results"
+            Add-content $log_file -value $result
+        }
+
+        if ($result.Length -gt 0) {
+            ErrorOut "storjshare-cli did not complete update successfully...try manually updating it..."
+        }
+        
+        LogWrite -color Green "storjshare-cli Update Completed"
+
+        LogWrite -color Cyan "Checking storjshare-cli version..."
 
         $pos=$output.IndexOf("storjshare-cli@")
 
@@ -505,22 +663,49 @@ function UseNPM([string]$Arguments) {
 
 function CheckRebootNeeded() {
 	if($global:reboot_needed) {
+        LogWrite -color Red "=============================================="
         LogWrite -color Red "~~~PLEASE REBOOT BEFORE PROCEEDING~~~"
         LogWrite -color White "After the reboot, re-launch this script to complete the installation"
-        ErrorOut -code $global:error_success_reboot_required "~~~PLEASE REBOOT BEFORE PROCEEDING~~~"
+        ErrorOut -code $global:error_success_reboot_required "~~~PLEASE REBOOT BEFORE PROCEEDING~~~"        
     } else {
         LogWrite -color Green "No Reboot Needed, continuing on with script"
     }
+}
+
+function CompareVersions([String]$version1,[String]$version2) {
+    $ver1 = $version1.Split(".")
+    $ver2 = $version2.Split(".")
+    if($ver1.Count -ne $ver2.Count) {
+        return -2
+    }
+    for($i=0;$i -lt $ver1.count;$i++) {
+        if($($ver1[$i]) -ne $($ver2[$i])) {
+            if($($ver1[$i]) -lt $($ver2[$i])) {
+                return -1
+            } else {
+                return 1
+            }
+        }
+    }
+    return 0
 }
 
 #-----------------------------------------------------------[Execution]------------------------------------------------------------
 
 handleParameters
 
-LogWrite -color Cyan "Performing Storj-cli Automated Installation"
-LogWrite -color Cyan "Script Version: $script_version"
+LogWrite -color Yellow "=============================================="
+LogWrite -color Cyan "Performing storjshare-cli Automated Management"
+LogWrite -color Cyan "Script Version: $global:script_version"
 LogWrite -color Cyan "Github Site: https://github.com/Storj/storj-automation"
 LogWrite -color Red "USE AT YOUR OWN RISK"
+LogWrite ""
+LogWrite -color Yellow "Recommended Versions of Software"
+LogWrite -color Cyan "Git for Windows: $gitforwindows_ver"
+LogWrite -color Cyan "Node.js: $nodejs_ver"
+LogWrite -color Cyan "Python: $python_ver"
+LogWrite -color Cyan "Visual Studio: $visualstudio_ver Commmunity Edition"
+LogWrite -color Yellow "=============================================="
 LogWrite ""
 LogWrite -color Cyan "Checking for Pre-Requirements..."
 LogWrite ""
@@ -544,13 +729,16 @@ LogWrite ""
 LogWrite ""
 LogWrite -color Cyan "Completed Pre-Requirements Check"
 LogWrite ""
+LogWrite -color Yellow "=============================================="
 checkRebootNeeded
 LogWrite ""
-LogWrite -color Yellow "Reviewing storjshare-cli..."
+LogWrite -color Cyan "Reviewing storjshare-cli..."
 storjshare-cliCheck
 LogWrite -color Green "storjshare-cli Review Completed"
 LogWrite ""
+LogWrite -color Yellow "=============================================="
 LogWrite ""
-LogWrite -color Cyan "Completed Storj-cli Automated Installion"
+LogWrite -color Cyan "Completed storjshare-cli Automated Management"
+LogWrite -color Yellow "=============================================="
 
 ErrorOut -code $global:return_code
