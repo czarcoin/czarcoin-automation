@@ -34,7 +34,7 @@ param(
 
 #---------------------------------------------------------[Initialisations]--------------------------------------------------------
 
-$global:script_version="2.2 Release" # Script version
+$global:script_version="2.3 Release" # Script version
 $global:reboot_needed=""
 $global:noupnp=""
 $global:error_success=0  #this is success
@@ -700,8 +700,25 @@ function CompareVersions([String]$version1,[String]$version2) {
     return 0
 }
 
+function ModifyService([string]$svc_name, [string]$svc_status) {
+    Set-Service $svc_name -startuptype $svc_status   
+}
+
 function EnableUPNP() {
     LogWrite -color Cyan "Enabling UPNP..."
+
+    #DNS Client
+    ModifyService "Dnscache" "Automatic"
+
+    #Function Discovery Resource Publication
+    ModifyService "FDResPub" "Manual"
+
+    #SSDP Discovery
+    ModifyService "SSDPSRV" "Manual"
+
+    #UPnP Device Host
+    ModifyService "upnphost" "Manual"
+
 	$results=SetUPNP "Yes"
 
     if($results -eq 0) {
@@ -713,6 +730,12 @@ function EnableUPNP() {
 
 function DisableUPNP() {
     LogWrite -color Cyan "Disabling UPNP..."
+
+    ModifyService "Dnscache" "Automatic"
+    ModifyService "FDResPub" "Manual"
+    ModifyService "SSDPSRV" "Disabled"
+    ModifyService "upnphost" "Disabled"
+
 	$results=SetUPNP "No"
 
     if($results -eq 0) {
