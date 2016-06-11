@@ -14,6 +14,7 @@
   PowerShell.exe -NoProfile -Command "& {Start-Process PowerShell.exe -ArgumentList '-NoProfile -ExecutionPolicy Bypass ""automate_storj_cli.ps1"" -silent' -Verb RunAs}"
 .INPUTS
   -silent - [optional] this will write everything to a log file and prevent the script from running pause commands.
+  -noupnp - [optional] Disables UPNP
 .OUTPUTS
   Return Codes (follows .msi standards) (https://msdn.microsoft.com/en-us/library/windows/desktop/aa376931(v=vs.85).aspx)
 #>
@@ -24,14 +25,18 @@ param(
     [Parameter(Mandatory=$false)]
     [SWITCH]$silent,
 
+    [Parameter(Mandatory=$false)]
+    [SWITCH]$noupnp,
+
     [parameter(Mandatory=$false,ValueFromRemainingArguments=$true)]
     [STRING]$other_args
  )
 
 #---------------------------------------------------------[Initialisations]--------------------------------------------------------
 
-$global:script_version="2.0 Release" # Script version
+$global:script_version="2.2 Release" # Script version
 $global:reboot_needed=""
+$global:noupnp=""
 $global:error_success=0  #this is success
 $global:error_invalid_parameter=87 #this is failiure, invalid parameters referenced
 $global:error_install_failure=1603 #this is failure, A fatal error occured during installation (default error)
@@ -70,6 +75,11 @@ function handleParameters() {
     {
         $message="Logging to console"
         LogWrite $message
+    }
+
+    #checks for noupnp flag
+    if ($noupnp) {
+        $global:noupnp=1
     }
 
     #checks for unknown/invalid parameters referenced
@@ -690,6 +700,62 @@ function CompareVersions([String]$version1,[String]$version2) {
     return 0
 }
 
+function EnableUPNP() {
+    LogWrite -color Cyan "Enabling UPNP..."
+	$results=SetUPNP "Yes"
+
+    if($results -eq 0) {
+        ErrorOut "Enabling UPNP failed to execute...try manually enabling UPNP..."
+    } else {
+        LogWrite -color Green "UPNP has been successfully enabled"
+    }
+}
+
+function DisableUPNP() {
+    LogWrite -color Cyan "Disabling UPNP..."
+	$results=SetUPNP "No"
+
+    if($results -eq 0) {
+        ErrorOut "Disabling UPNP failed to execute...try manually disabling UPNP..."
+    } else {
+        LogWrite -color Green "UPNP has been successfully disabled"
+    }
+}
+
+function SetUPNP([string]$upnp_set) {
+	$filename = 'upnp_output.log';
+	$save_path = '' + $save_dir + '\' + $filename;
+	if(!(Test-Path -pathType container $save_dir)) {
+	    ErrorOut "Save directory $save_dir does not exist";
+	}
+	
+    $Arguments="advfirewall firewall set rule group=`"Network Discovery`" new enable=$($upnp_set)"
+    $proc = Start-Process "netsh" -ArgumentList $Arguments -RedirectStandardOutput "$save_path" -Passthru
+    $proc.WaitForExit()
+
+    if(!(Test-Path $save_path)) {
+        ErrorOut "npm command $Arguments failed to execute...try manually running it..."
+    }
+    
+    $results=(Get-Content -Path "$save_path") | Where-Object {$_ -like '*Ok*'}
+    Remove-Item "$save_path"
+    
+    if($results.Length -eq 0) {
+        return 0
+    }
+
+    return 1
+}
+
+function CheckUPNP() {
+    LogWrite "Checking UPNP Flag..."
+    if($global:noupnp) {
+        DisableUPNP
+    } else {
+        EnableUPNP
+    }
+}
+
 #-----------------------------------------------------------[Execution]------------------------------------------------------------
 
 handleParameters
@@ -738,6 +804,11 @@ LogWrite -color Green "storjshare-cli Review Completed"
 LogWrite ""
 LogWrite -color Yellow "=============================================="
 LogWrite ""
+LogWrite -color Cyan "Reviewing UPNP..."
+CheckUPNP
+LogWrite -color Green "UPNP Review Completed"
+LogWrite ""
+LogWrite -color Yellow "=============================================="
 LogWrite -color Cyan "Completed storjshare-cli Automated Management"
 LogWrite -color Yellow "=============================================="
 
