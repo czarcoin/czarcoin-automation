@@ -79,7 +79,7 @@ function handleParameters() {
 
     #checks for noupnp flag
     if ($noupnp) {
-        $global:noupnp=1
+        $global:noupnp="true"
     }
 
     #checks for unknown/invalid parameters referenced
