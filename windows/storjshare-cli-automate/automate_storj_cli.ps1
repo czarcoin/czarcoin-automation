@@ -1,4 +1,4 @@
-#Requires -Version 2
+#Requires -Version 5
 #Requires -RunAsAdministrator
 <#
 .SYNOPSIS
@@ -15,6 +15,8 @@
 .INPUTS
   -silent - [optional] this will write everything to a log file and prevent the script from running pause commands.
   -noupnp - [optional] Disables UPNP
+  -installsvc - [optional] Installs storjshare as a service (see the config section in the script to customize) -- VERY BETA
+  -removesvc - [optional] Removes storjshare as a service (see the config section in the script to customize) -- VERY BETA
 .OUTPUTS
   Return Codes (follows .msi standards) (https://msdn.microsoft.com/en-us/library/windows/desktop/aa376931(v=vs.85).aspx)
 #>
@@ -28,15 +30,22 @@ param(
     [Parameter(Mandatory=$false)]
     [SWITCH]$noupnp,
 
+    [Parameter(Mandatory=$false)]
+    [SWITCH]$installsvc,
+
+    [Parameter(Mandatory=$false)]
+    [SWITCH]$removesvc,
+
     [parameter(Mandatory=$false,ValueFromRemainingArguments=$true)]
     [STRING]$other_args
  )
 
 #---------------------------------------------------------[Initialisations]--------------------------------------------------------
 
-$global:script_version="2.3 Release" # Script version
+$global:script_version="2.5 Release" # Script version
 $global:reboot_needed=""
 $global:noupnp=""
+$global:installsvc=""
 $global:error_success=0  #this is success
 $global:error_invalid_parameter=87 #this is failiure, invalid parameters referenced
 $global:error_install_failure=1603 #this is failure, A fatal error occured during installation (default error)
@@ -64,6 +73,16 @@ $visualstudio_dl="http://go.microsoft.com/fwlink/?LinkID=626924"  #  link to 201
 $Lowriskregpath ="HKCU:\Software\Microsoft\Windows\Currentversion\Policies\Associations"
 $Lowriskregfile = "LowRiskFileTypes"
 $LowRiskFileTypes = ".exe"
+
+$nssm_ver="2.24" # (Default: 2.24)
+$nssm_location="$env:windir\System32" # Default windows directory
+$nssm_bin='' + $nssm_location + '\' + "nssm.exe" # (Default: %WINDIR%\System32\nssm.exe)
+$storjshare_bin='' + $env:appdata + '\' + "npm\storjshare.cmd" # Default: storjshare-cli location %APPDATA%\npm\storjshare.cmd"
+
+$storjshare_svc_name="storjshare"
+$storjshare_location="C:\storjshare"
+$storjshare_password="1234"
+$storjshare_log="$save_dir\storjshare_svc.log"
 #-----------------------------------------------------------[Functions]------------------------------------------------------------
 
 function handleParameters() {
@@ -80,6 +99,16 @@ function handleParameters() {
     #checks for noupnp flag
     if ($noupnp) {
         $global:noupnp="true"
+    }
+
+    #checks for installsvc flag
+    if ($installsvc) {
+        $global:installsvc="true"
+    }
+
+    #checks for installsvc flag
+    if ($removesvc) {
+        $global:removesvc="true"
     }
 
     #checks for unknown/invalid parameters referenced
@@ -779,6 +808,127 @@ function CheckUPNP() {
     }
 }
 
+function CheckService([string]$svc_name) {
+    write-host "Checking if $svc_name Service is installed..."
+    if (Get-Service $svc_name -ErrorAction SilentlyContinue) {
+        return 1
+    } else {
+        return 0
+    }
+}
+
+function RemoveService([string]$svc_name) {
+    LogWrite "Checking for service: $svc_name"
+    if(CheckService $svc_name -eq 1) {
+        $serviceToRemove = Get-WmiObject -Class Win32_Service -Filter "name='$svc_name'"
+        $serviceToRemove.delete()
+        if(CheckService $svc_name -eq 1) {
+            ErrorOut "Failed to remove $svc_name"
+        } else {
+            write-host "Service $svc_name successfully removed"
+        }
+    } else {
+        write-host "Service $svc_name is not installed, skipping removal..."
+    }
+}
+
+function UseNSSM([string]$Arguments) {
+	$filename = 'nssm_output.log';
+	$save_path = '' + $save_dir + '\' + $filename;
+	if(!(Test-Path -pathType container $save_dir)) {
+	    ErrorOut "Save directory $save_dir does not exist";
+	}
+	
+    $proc = Start-Process "nssm" -ArgumentList $Arguments -RedirectStandardOutput "$save_path" -Passthru
+    $proc.WaitForExit()
+
+    if(!(Test-Path $save_path)) {
+        ErrorOut "nssm command $Arguments failed to execute..."
+    }
+    
+    $results=(Get-Content -Path "$save_path")
+    Remove-Item "$save_path"
+    
+    return $results
+}
+
+function Installnssm([string]$save_location,[string]$arch) {
+    if(Test-Path $save_location) {
+        LogWrite "Checking for $save_location"
+
+        $filename=Split-Path $save_location -leaf
+        $filename=$filename.Substring(0,$filename.Length-4)
+        $extracted_folder="$save_dir\$filename"
+        if(Test-Path -pathType container $extracted_folder) {
+		    LogWrite "Skipping extraction...extracted folder already exists"
+	    } else {
+            LogWrite "Extracting NSSM zip"
+            Add-Type -assembly “system.io.compression.filesystem”
+            [io.compression.zipfile]::ExtractToDirectory($save_location, $save_dir)
+            LogWrite "Extracted NSSM successfully"
+        }
+
+        LogWrite "Placing NSSM into $nssm_location"
+        Copy-Item "$extracted_folder\$arch\nssm.exe" "$nssm_location"
+
+        if(!(Test-Path "$nssm_location\nssm.exe")) {
+            ErrorOut "Failed to place NSSM at $nssm_location"
+        }
+
+        LogWrite "NSSM Placed Successfully"
+    } else {
+        ErrorOut "NSSM installation file does not exist at: $save_location"
+    }
+}
+
+function nssmCheck([string]$version,[string]$svc_name) {
+    if($global:installsvc -or $global:removesvc) {
+        LogWrite "Checking if NSSM is installed..."
+
+	    if(!(Test-Path $nssm_bin)) {
+            LogWrite "NSSM is not installed."
+            if ([System.IntPtr]::Size -eq 4) {
+                $arch="32-bit"
+                $arch_ver='win32'
+            } else {
+                $arch="64-bit"
+                $arch_ver='win64'
+            }
+
+	        $filename = 'nssm-' + $version + '.zip';
+	        $save_path = '' + $save_dir + '\' + $filename;
+            $url='https://nssm.cc/release/' + $filename;
+	        if(!(Test-Path -pathType container $save_dir)) {
+		        ErrorOut "Save directory $save_dir does not exist"
+	        }
+
+            LogWrite "Downloading NSSM $version..."
+            DownloadFile $url $save_path
+            LogWrite "NSSM downloaded"
+
+            LogWrite "Installing NSSM $version..."
+            Installnssm $save_path $arch_ver
+
+            LogWrite -color Green "NSSM Installed Successfully"
+        } else {
+             LogWrite -color Green "NSSM already installed"
+        }
+
+        LogWrite "Checking for $svc_name to see if it exists"
+        RemoveService $svc_name
+    
+        if($global:installsvc) {
+            LogWrite "Installing service $svc_name"
+            $Arguments="install $svc_name $storjshare_bin start --datadir $storjshare_location --password $storjshare_password >> $storjshare_log"
+            $results=UseNSSM $Arguments
+            if(CheckService($svc_name)) {
+                LogWrite -color Green "Service $svc_name Installed Successfully"
+            } else {
+                ErrorOut "Failed to install service $svc_name"
+            }
+        }
+    }
+}
 #-----------------------------------------------------------[Execution]------------------------------------------------------------
 
 handleParameters
@@ -830,6 +980,12 @@ LogWrite ""
 LogWrite -color Cyan "Reviewing UPNP..."
 CheckUPNP
 LogWrite -color Green "UPNP Review Completed"
+LogWrite ""
+LogWrite -color Yellow "=============================================="
+LogWrite ""
+LogWrite -color Cyan "Reviewing Service..."
+nssmCheck $nssm_ver $storjshare_svc_name
+LogWrite -color Green "Service Review Completed"
 LogWrite ""
 LogWrite -color Yellow "=============================================="
 LogWrite -color Cyan "Completed storjshare-cli Automated Management"
