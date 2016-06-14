@@ -3,10 +3,10 @@ Automates the installation of storjshare-cli for Windows only
 <br/>INSTRUCTIONS:
 <br/>1.) Download ZIP of storjshare-cli-automate
 <br/>2.) Extract ZIP
-<br/>3.) Double-click `automate_storj_cli.bat`
+<br/>3.) Double-click `install.bat`
 <br/>4.) (if prompted) Click Yes on the User Account Control (UAC) screen
 <br/>5.) Reboot when completed
-<br/>6.) Double-click `automate_storj_cli.bat`
+<br/>6.) Double-click `install.bat`
 <br/>7.) Installation should be completed.  Configure storjshare-cli as needed.
 <br/>
 <br/>COMPATIBILITY:
