@@ -7,7 +7,7 @@
   The declarations section can be modified to the location of each storjshare instance.
   Each location should end with a semi-colon (;).
 
-  The smallest amount reported is KB and the largest is TB
+  The smallest amount reported is KB and the largest is PB
 
   Example:
     $storjshareFolders = "E:\storjshare;"
@@ -20,7 +20,7 @@
 #---------------------------------------------------------[Initialisations]--------------------------------------------------------
 
 $global:total=0
-$global:script_version="1.1 Release"
+$global:script_version="1.2 Release"
 
 #----------------------------------------------------------[Declarations]----------------------------------------------------------
 
@@ -40,6 +40,10 @@ function ConvertSize($size) {
             if($size -ge 1000) {
                 $size=$size / 1000
                 $unit="TB"
+                if($size -ge 1000) {
+                    $size=$size / 1000
+                    $unit="PB"
+                }
             }
         }
     } else {
