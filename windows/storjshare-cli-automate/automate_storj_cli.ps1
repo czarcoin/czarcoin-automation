@@ -10,13 +10,28 @@
   Then it checks for storjshare-cli
   Then it updates storjshare-cli
 
+  Examples:
   To deploy silently use the following command
-  PowerShell.exe -NoProfile -Command "& {Start-Process PowerShell.exe -ArgumentList '-NoProfile -ExecutionPolicy Bypass ""automate_storj_cli.ps1"" -silent' -Verb RunAs}"
+  ./automate_storj_cli.ps1 -silent
+
+  To install service use the following command
+  ./automate_storj_cli.ps1 -installsvc -svcname storjshare -datadir C:\storjshare -password 4321
+
+  To remove service use the following command
+  ./automate_storj_cli.ps1 -removesvc -svcname storjshare
+
+  To disable UPNP
+  ./automate_storj_cli.ps1 -noupnp
+
 .INPUTS
   -silent - [optional] this will write everything to a log file and prevent the script from running pause commands.
   -noupnp - [optional] Disables UPNP
-  -installsvc - [optional] Installs storjshare as a service (see the config section in the script to customize) -- VERY BETA
-  -removesvc - [optional] Removes storjshare as a service (see the config section in the script to customize) -- VERY BETA
+  -installsvc - [optional] Installs storjshare as a service (see the config section in the script to customize)
+    -svcname [name] - [required] Installs the service with this name
+    -datadir [directory] - [required] Data Directory of Storjshare
+    -password [password] - [required] Password for Storjshare Directory
+  -removesvc - [optional] Removes storjshare as a service (see the config section in the script to customize)
+    -svcname [name] - required] Removes the service with this name (*becareful*)
 .OUTPUTS
   Return Codes (follows .msi standards) (https://msdn.microsoft.com/en-us/library/windows/desktop/aa376931(v=vs.85).aspx)
 #>
@@ -33,6 +48,15 @@ param(
     [Parameter(Mandatory=$false)]
     [SWITCH]$installsvc,
 
+    [Parameter(Mandatory=$false,ValueFromPipelineByPropertyName=$true)]
+    [STRING]$svcname,
+
+    [Parameter(Mandatory=$false,ValueFromPipelineByPropertyName=$true)]
+    [STRING]$datadir,
+
+    [Parameter(Mandatory=$false,ValueFromPipelineByPropertyName=$true)]
+    [STRING]$password,
+
     [Parameter(Mandatory=$false)]
     [SWITCH]$removesvc,
 
@@ -42,10 +66,13 @@ param(
 
 #---------------------------------------------------------[Initialisations]--------------------------------------------------------
 
-$global:script_version="2.6 Release" # Script version
+$global:script_version="2.7 Release" # Script version
 $global:reboot_needed=""
 $global:noupnp=""
 $global:installsvc=""
+$global:svcname=""
+$global:datadir=""
+$global:password=""
 $global:error_success=0  #this is success
 $global:error_invalid_parameter=87 #this is failiure, invalid parameters referenced
 $global:error_install_failure=1603 #this is failure, A fatal error occured during installation (default error)
@@ -79,10 +106,7 @@ $nssm_location="$env:windir\System32" # Default windows directory
 $nssm_bin='' + $nssm_location + '\' + "nssm.exe" # (Default: %WINDIR%\System32\nssm.exe)
 $storjshare_bin='' + $env:appdata + '\' + "npm\storjshare.cmd" # Default: storjshare-cli location %APPDATA%\npm\storjshare.cmd"
 
-$storjshare_svc_name="storjshare"
-$storjshare_location="C:\storjshare"
-$storjshare_password="1234"
-$storjshare_log="$save_dir\storjshare_svc.log"
+$storjshare_log="$save_dir\$global:svcname.log"
 #-----------------------------------------------------------[Functions]------------------------------------------------------------
 
 function handleParameters() {
@@ -104,11 +128,35 @@ function handleParameters() {
     #checks for installsvc flag
     if ($installsvc) {
         $global:installsvc="true"
+
+        if(!($svcname)) {
+            ErrorOut -code $global:error_invalid_parameter "ERROR: Service Name not specified"
+        } else {
+            $global:svcname="$svcname"
+        }
+
+        if(!($datadir)) {
+            ErrorOut -code $global:error_invalid_parameter "ERROR: Service Name not specified"
+        } else {
+            $global:datadir="$datadir"
+        }
+
+        if(!($password)) {
+            ErrorOut -code $global:error_invalid_parameter "ERROR: Service Name not specified"
+        } else {
+            $global:password="$password"
+        }
     }
 
-    #checks for installsvc flag
+    #checks for removesvc flag
     if ($removesvc) {
         $global:removesvc="true"
+
+        if(!($svcname)) {
+            ErrorOut -code $global:error_invalid_parameter "ERROR: Service Name not specified"
+        } else {
+            $global:svcname="$svcname"
+        }
     }
 
     #checks for unknown/invalid parameters referenced
@@ -438,14 +486,12 @@ function PythonCheck([string]$version) {
     LogWrite "Checking for Python Environment Path..."
     $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine")
     $PathasArray=($Env:PATH).split(';')
-    If ($PathasArray -contains $python_path -or $PathAsArray -contains $python_path+'\') {
+    if ($PathasArray -contains $python_path -or $PathAsArray -contains $python_path+'\') {
         LogWrite "Python Environment Path $python_path already within System Environment Path, skipping..."
-    }
-    else
-    {
+    } else {
         $OldPath=(Get-ItemProperty -Path 'Registry::HKEY_LOCAL_MACHINE\System\CurrentControlSet\Control\Session Manager\Environment' -Name PATH -ErrorAction SilentlyContinue).Path
         $NewPath=$OldPath+';'+$python_path;
-        Set-ItemProperty -Path 'Registry::HKEY_LOCAL_MACHINE\System\CurrentControlSet\Control\Session Manager\Environment' -Name PATH -Value $newPath -ErrorAction SilentlyContinue)
+        Set-ItemProperty -Path 'Registry::HKEY_LOCAL_MACHINE\System\CurrentControlSet\Control\Session Manager\Environment' -Name PATH -Value $newPath -ErrorAction SilentlyContinue
         LogWrite "Python Environment Path Added: $python_path"
         $global:reboot_needed="true"
     }
@@ -453,14 +499,12 @@ function PythonCheck([string]$version) {
     $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine")
     $PathasArray=($Env:PATH).split(';')
     $python_path=$python_path+"Scripts\";
-    If ($PathasArray -contains $python_path -or $PathAsArray -contains $python_path+'\') {
+    if ($PathasArray -contains $python_path -or $PathAsArray -contains $python_path+'\') {
         LogWrite "Python Environment Path $python_path already within System Environment Path, skipping..."
-    }
-    else
-    {
-        $OldPath=(Get-ItemProperty -Path 'Registry::HKEY_LOCAL_MACHINE\System\CurrentControlSet\Control\Session Manager\Environment' -Name PATH -ErrorAction SilentlyContinue)).Path
+    } else {
+        $OldPath=(Get-ItemProperty -Path 'Registry::HKEY_LOCAL_MACHINE\System\CurrentControlSet\Control\Session Manager\Environment' -Name PATH -ErrorAction SilentlyContinue).Path
         $NewPath=$OldPath+';'+$python_path;
-        Set-ItemProperty -Path 'Registry::HKEY_LOCAL_MACHINE\System\CurrentControlSet\Control\Session Manager\Environment' -Name PATH -Value $newPath -ErrorAction SilentlyContinue)
+        Set-ItemProperty -Path 'Registry::HKEY_LOCAL_MACHINE\System\CurrentControlSet\Control\Session Manager\Environment' -Name PATH -Value $newPath -ErrorAction SilentlyContinue
         $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine")
         LogWrite "Python Environment Path Added: $python_path"
         $global:reboot_needed="true"
@@ -863,7 +907,7 @@ function Installnssm([string]$save_location,[string]$arch) {
 		    LogWrite "Skipping extraction...extracted folder already exists"
 	    } else {
             LogWrite "Extracting NSSM zip"
-            Add-Type -assembly “system.io.compression.filesystem”
+            Add-Type -assembly â€œsystem.io.compression.filesystemâ€
             [io.compression.zipfile]::ExtractToDirectory($save_location, $save_dir)
             LogWrite "Extracted NSSM successfully"
         }
@@ -881,7 +925,7 @@ function Installnssm([string]$save_location,[string]$arch) {
     }
 }
 
-function nssmCheck([string]$version,[string]$svc_name) {
+function nssmCheck([string]$version) {
     if($global:installsvc -or $global:removesvc) {
         LogWrite "Checking if NSSM is installed..."
 
@@ -914,17 +958,23 @@ function nssmCheck([string]$version,[string]$svc_name) {
              LogWrite -color Green "NSSM already installed"
         }
 
-        LogWrite "Checking for $svc_name to see if it exists"
-        RemoveService $svc_name
-    
+        LogWrite "Checking for $global:svcname to see if it exists"
+        RemoveService $global:svcname
+
         if($global:installsvc) {
-            LogWrite "Installing service $svc_name"
-            $Arguments="install $svc_name $storjshare_bin start --datadir $storjshare_location --password $storjshare_password >> $storjshare_log"
+
+            LogWrite "Checking if storjshare-cli data directory exists..."
+	        if(!(Test-Path -pathType container $global:datadir)) {
+	            ErrorOut "sorjshare-cli directory $global:datadir does not exist, you may want to setup storjshare-cli first.";
+	        }
+
+            LogWrite "Installing service $global:svcname"
+            $Arguments="install $global:svcname $storjshare_bin start --datadir $global:datadir --password $global:password >> $storjshare_log"
             $results=UseNSSM $Arguments
-            if(CheckService($svc_name)) {
-                LogWrite -color Green "Service $svc_name Installed Successfully"
+            if(CheckService($global:svcname)) {
+                LogWrite -color Green "Service $global:svcname Installed Successfully"
             } else {
-                ErrorOut "Failed to install service $svc_name"
+                ErrorOut "Failed to install service $global:svcname"
             }
         }
     }
@@ -984,7 +1034,7 @@ LogWrite ""
 LogWrite -color Yellow "=============================================="
 LogWrite ""
 LogWrite -color Cyan "Reviewing Service..."
-nssmCheck $nssm_ver $storjshare_svc_name
+nssmCheck $nssm_ver
 LogWrite -color Green "Service Review Completed"
 LogWrite ""
 LogWrite -color Yellow "=============================================="
