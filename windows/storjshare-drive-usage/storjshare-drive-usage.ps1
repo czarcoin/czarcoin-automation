@@ -98,7 +98,7 @@ write-host -ForegroundColor Yellow "============================================
 write-host -ForegroundColor Green "Total Disk Space Used: $global:total"
 write-host ""
 write-host -ForegroundColor Yellow "=============================================="
-write-host -ForegroundColor Cyan "Completed storjshare-cli Automated Management"
+write-host -ForegroundColor Cyan "Completed storjshare-size Report"
 write-host -ForegroundColor Yellow "=============================================="
 
 pause
