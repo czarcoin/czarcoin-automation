@@ -20,7 +20,7 @@
 #---------------------------------------------------------[Initialisations]--------------------------------------------------------
 
 $global:total=0
-$global:script_version="1.0 Release"
+$global:script_version="1.1 Release"
 
 #----------------------------------------------------------[Declarations]----------------------------------------------------------
 
@@ -69,7 +69,9 @@ function GetFolderSize([string]$folder) {
 
 function GetStorjshareList([string]$folders) {
     foreach ($i in $folders.Split(";")) {
-       GetFolderSize $i
+        if($i) {
+          GetFolderSize $i
+        }
     }
 
     $global:total=ConvertSize $global:total
