@@ -1039,6 +1039,11 @@ nssmCheck $nssm_ver
 LogWrite -color Green "Service Review Completed"
 LogWrite ""
 LogWrite -color Yellow "=============================================="
+LogWrite ""
+LogWrite -color Cyan "You may now follow the remaining setup instructions here (if applicable):"
+LogWrite -color Cyan "https://github.com/Storj/storjshare-cli#installation"
+LogWrite ""
+LogWrite -color Yellow "=============================================="
 LogWrite -color Cyan "Completed storjshare-cli Automated Management"
 LogWrite -color Yellow "=============================================="
 
