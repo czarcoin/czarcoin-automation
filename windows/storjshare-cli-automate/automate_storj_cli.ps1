@@ -66,7 +66,7 @@ param(
 
 #---------------------------------------------------------[Initialisations]--------------------------------------------------------
 
-$global:script_version="2.7 Release" # Script version
+$global:script_version="2.8 Release" # Script version
 $global:reboot_needed=""
 $global:noupnp=""
 $global:installsvc=""
