@@ -42,7 +42,7 @@ param(
 
 #---------------------------------------------------------[Initialisations]--------------------------------------------------------
 
-$global:script_version="2.6 Release" # Script version
+$global:script_version="2.7 Release" # Script version
 $global:reboot_needed=""
 $global:noupnp=""
 $global:installsvc=""
@@ -556,7 +556,8 @@ function storjshare-cliCheck() {
 
         LogWrite -color Cyan "Performing storjshare-cli Update..."
 
-        $Arguments = "update -g storjshare-cli"
+        #$Arguments = "update -g storjshare-cli"
+        $Arguments = "install -g storjshare-cli"
         $result=(UseNPM $Arguments| Where-Object {$_ -like '*ERR!*'})
 
         #write npm logs to log file if in silent mode
