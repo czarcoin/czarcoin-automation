@@ -915,7 +915,7 @@ function Installnssm([string]$save_location,[string]$arch) {
 		    LogWrite "Skipping extraction...extracted folder already exists"
 	    } else {
             LogWrite "Extracting NSSM zip"
-            Add-Type -assembly Ã¢â‚¬Å“system.io.compression.filesystemÃ¢â‚¬Â
+            Add-Type -assembly "system.io.compression.filesystem"
             [io.compression.zipfile]::ExtractToDirectory($save_location, $save_dir)
             LogWrite "Extracted NSSM successfully"
         }
