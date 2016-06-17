@@ -600,7 +600,8 @@ function storjshare-cliCheck() {
 
         LogWrite -color Cyan "Performing storjshare-cli Update..."
 
-        $Arguments = "update -g storjshare-cli"
+        #$Arguments = "update -g storjshare-cli"
+        $Arguments = "install -g storjshare-cli"
         $result=(UseNPM $Arguments| Where-Object {$_ -like '*ERR!*'})
 
         #write npm logs to log file if in silent mode
