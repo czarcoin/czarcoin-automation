@@ -66,7 +66,7 @@ param(
 
 #---------------------------------------------------------[Initialisations]--------------------------------------------------------
 
-$global:script_version="2.8 Release" # Script version
+$global:script_version="2.9 Release" # Script version
 $global:reboot_needed=""
 $global:noupnp=""
 $global:installsvc=""
@@ -532,8 +532,9 @@ function VisualStudioCheck([string]$version, [string]$dl_link) {
         If(!(Get-IsProgramInstalled "Microsoft Visual Studio Community")) {
            ErrorOut "Visual Studio Community $version Edition did not complete installation successfully...try manually installing it..."
         }
-
+        
         $global:reboot_needed="true"
+
         LogWrite -color Green "Visual Studio Community $version Edition Installed"
     }
     else
@@ -728,19 +729,25 @@ function InstallMSI([string]$installer) {
 function UseNPM([string]$Arguments) {
 	$filename = 'npm_output.log';
 	$save_path = '' + $save_dir + '\' + $filename;
+
+	$filename_err = 'npm_output_err.log';
+	$save_path_err = '' + $save_dir + '\' + $filename_err;
 	if(!(Test-Path -pathType container $save_dir)) {
 	    ErrorOut "Save directory $save_dir does not exist";
 	}
 	
-    $proc = Start-Process "npm" -ArgumentList $Arguments -RedirectStandardOutput "$save_path" -Passthru
+    $proc = Start-Process "npm" -ArgumentList $Arguments -RedirectStandardOutput "$save_path" -RedirectStandardError "$save_path_err" -Passthru
     $proc.WaitForExit()
 
-    if(!(Test-Path $save_path)) {
+    if(!(Test-Path $save_path) -or !(Test-Path $save_path_err)) {
         ErrorOut "npm command $Arguments failed to execute...try manually running it..."
     }
     
     $results=(Get-Content -Path "$save_path")
+    $results+=(Get-Content -Path "$save_path_err")
+
     Remove-Item "$save_path"
+    Remove-Item "$save_path_err"
     
     return $results
 }
@@ -908,7 +915,7 @@ function Installnssm([string]$save_location,[string]$arch) {
 		    LogWrite "Skipping extraction...extracted folder already exists"
 	    } else {
             LogWrite "Extracting NSSM zip"
-            Add-Type -assembly â€œsystem.io.compression.filesystemâ€
+            Add-Type -assembly Ã¢â‚¬Å“system.io.compression.filesystemÃ¢â‚¬Â
             [io.compression.zipfile]::ExtractToDirectory($save_location, $save_dir)
             LogWrite "Extracted NSSM successfully"
         }
