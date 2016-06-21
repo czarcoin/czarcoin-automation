@@ -15,7 +15,21 @@ Automates the installation of storjshare-cli for Windows only
 <br/>   -Client OS: Windows 7 or newer
 <br/>   -Server OS: Windows 2008 or newer
 <br/>
+<br/>ADVANCED FUNCTIONALITY:
+<br/>  Examples:
+<br/>  To deploy silently use the following command
+<br/>  ./automate_storj_cli.ps1 -silent
+<br/>
+<br/>  To install service use the following command
+<br/>  ./automate_storj_cli.ps1 -installsvc -svcname storjshare -datadir C:\storjshare -password 4321
+<br/>
+<br/>  To remove service use the following command
+<br/>  ./automate_storj_cli.ps1 -removesvc -svcname storjshare
+<br/>
+<br/>  To disable UPNP
+<br/>  ./automate_storj_cli.ps1 -noupnp
+<br/>
 <br/>TODO:
 <br/>   -Perform uninstall of pre-requirements and storj-cli
-<br/>   -Install storj-cli as a service(s)
 <br/>   -Modify configuration of instance
+<br/>   -Setup storjshare-cli through commands
