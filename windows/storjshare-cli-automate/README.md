@@ -7,7 +7,7 @@ Automates the installation of storjshare-cli for Windows only
 <br/>4.) (if prompted) Click Yes on the User Account Control (UAC) screen
 <br/>5.) Reboot when completed
 <br/>6.) Double-click `install.bat`
-<br/>7.) Installation should be completed.  Configure storjshare-cli as needed.
+<br/>7.) Installation should be completed. Follow `https://github.com/Storj/storjshare-cli#usage` to complete.
 <br/>
 <br/>COMPATIBILITY:
 <br/>   -PowerShell Version 2 or newer
