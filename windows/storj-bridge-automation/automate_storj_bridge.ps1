@@ -209,10 +209,10 @@ function WaitUser() {
     }
 }
 
-function mongoDBCheck([string]$version) {
-    LogWrite "Checking if mongoDB is installed..."
-    If(!(Get-IsProgramInstalled "mongoDB")) {
-        LogWrite "mongoDB $version is not installed."
+function MongoDBCheck([string]$version) {
+    LogWrite "Checking if MongoDB is installed..."
+    If(!(Get-IsProgramInstalled "MongoDB")) {
+        LogWrite "MongoDB $version is not installed."
         if ([System.IntPtr]::Size -eq 4) {
             $arch="32-bit"
             $arch_ver='-i386'
@@ -221,51 +221,51 @@ function mongoDBCheck([string]$version) {
             $arch_ver='-x86_64-2008plus'
         }
 
-	    $filename = 'mongodb-win32-' + $arch_ver + '-' + $version + '-signed.msi';
+	    $filename = 'mongodb-win32' + $arch_ver + '-' + $version + '-signed.msi';
 	    $save_path = '' + $save_dir + '\' + $filename;
-        $url='https://www.mongodb.com/dr/fastdl.mongodb.org/win32/' + $filename + '/download';
+        $url='http://downloads.mongodb.org/win32/' + $filename;
 	    if(!(Test-Path -pathType container $save_dir)) {
 		    ErrorOut "Save directory $save_dir does not exist"
 	    }
 
-        LogWrite "Downloading mongoDB ($arch) $version..."
-        FollowDownloadFile $url $save_path
-        LogWrite "mongoDB downloaded"
+        LogWrite "Downloading MongoDB ($arch) $version..."
+        DownloadFile $url $save_path
+        LogWrite "MongoDB downloaded"
 
-	    LogWrite "Installing mongoDB $version..."
+	    LogWrite "Installing MongoDB $version..."
 	    InstallMSI $save_path
         
-        If(!(Get-IsProgramInstalled "mongoDB")) {
-           ErrorOut "mongoDB did not complete installation successfully...try manually installing it..."
+        If(!(Get-IsProgramInstalled "MongoDB")) {
+           ErrorOut "MongoDB did not complete installation successfully...try manually installing it..."
         }
 
         $global:reboot_needed="true"
-        LogWrite -color Green "mongoDB Installed Successfully"
+        LogWrite -color Green "MongoDB Installed Successfully"
     }
     else
     {
-        LogWrite "mongoDB is already installed."
+        LogWrite "MongoDB is already installed."
         LogWrite "Checking version..."
 
-        $installed_version = Get-ProgramVersion( "mongoDB" )
+        $installed_version = Get-ProgramVersion( "MongoDB" )
         if(!$installed_version) {
-            ErrorOut "mongoDB Version is Unknown - Error"
+            ErrorOut "MongoDB Version is Unknown - Error"
         }
 
         $result = CompareVersions $installed_version $mongodb_ver
         if($result -eq "-2") {
-            ErrorOut "Unable to match mongoDB version (Installed Version: $installed_version / Requested Version: $mongodb_ver)"
+            ErrorOut "Unable to match MongoDB version (Installed Version: $installed_version / Requested Version: $mongodb_ver)"
         }
 
         if($result -eq 0)
         {
-            LogWrite "mongoDB is already updated. Skipping..."
+            LogWrite "MongoDB is already updated. Skipping..."
         } elseif($result -eq 1) {
-            LogWrite "mongoDB is newer than the recommended version. Skipping..."
+            LogWrite "MongoDB is newer than the recommended version. Skipping..."
         } else {
-            LogWrite "mongoDB is out of date."
+            LogWrite "MongoDB is out of date."
             
-            LogWrite -Color Cyan "mongoDB $installed_version will be updated to $mongodb_ver..."
+            LogWrite -Color Cyan "MongoDB $installed_version will be updated to $mongodb_ver..."
             if ([System.IntPtr]::Size -eq 4) {
                 $arch="32-bit"
                 $arch_ver='-i386'
@@ -274,30 +274,30 @@ function mongoDBCheck([string]$version) {
                 $arch_ver='-x86_64-2008plus'
             }
 
-            $filename = 'mongodb-win32-' + $arch_ver + '-' + $mongodb_ver + '-signed.msi';
+            $filename = 'mongodb-win32' + $arch_ver + '-' + $mongodb_ver + '-signed.msi';
 	        $save_path = '' + $save_dir + '\' + $filename;
-            $url='https://www.mongodb.com/dr/fastdl.mongodb.org/win32/' + $filename + '/download';
+            $url='http://downloads.mongodb.org/win32/' + $filename;
 	        if(!(Test-Path -pathType container $save_dir)) {
 		        ErrorOut "Save directory $save_dir does not exist"
 	        }
 
-            LogWrite "Downloading mongoDB ($arch) $mongodb_ver..."
-            FollowDownloadFile $url $save_path
-            LogWrite "mongoDB downloaded"
+            LogWrite "Downloading MongoDB ($arch) $mongodb_ver..."
+            DownloadFile $url $save_path
+            LogWrite "MongoDB downloaded"
 
-	        LogWrite "Installing mongoDB $version..."
+	        LogWrite "Installing MongoDB $version..."
 	        InstallMSI $save_path
         
-            If(!(Get-IsProgramInstalled "mongoDB")) {
-                ErrorOut "mongoDB did not complete installation successfully...try manually updating it..."
+            If(!(Get-IsProgramInstalled "MongoDB")) {
+                ErrorOut "MongoDB did not complete installation successfully...try manually updating it..."
             }
 
             $global:reboot_needed="true"
-            LogWrite -color Green "mongoDB Updated Successfully"
+            LogWrite -color Green "MongoDB Updated Successfully"
             $installed_version = $mongodb_ver           
         }
 
-        LogWrite -color Green "mongoDB Installed Version: $installed_version"
+        LogWrite -color Green "MongoDB Installed Version: $installed_version"
     }
 }
 
@@ -1096,7 +1096,7 @@ LogWrite -color Cyan "Github Site: https://github.com/Storj/storj-automation"
 LogWrite -color Red "USE AT YOUR OWN RISK"
 LogWrite ""
 LogWrite -color Yellow "Recommended Versions of Software"
-LogWrite -color Cyan "mongoDB: $mongodb_ver"
+LogWrite -color Cyan "MongoDB: $mongodb_ver"
 LogWrite -color Cyan "Git for Windows: $gitforwindows_ver"
 LogWrite -color Cyan "Node.js: $nodejs_ver"
 LogWrite -color Cyan "Python: $python_ver"
@@ -1106,8 +1106,8 @@ LogWrite ""
 LogWrite -color Cyan "Checking for Pre-Requirements..."
 LogWrite ""
 LogWrite ""
-LogWrite -color Yellow "Reviewing Git for Windows..."
-GitForWindowsCheck $mongodb_ver
+LogWrite -color Yellow "Reviewing mongoD..."
+MongoDBCheck $mongodb_ver
 LogWrite -color Green "Git for Windows Review Completed"
 LogWrite ""
 LogWrite -color Yellow "Reviewing Git for Windows..."
