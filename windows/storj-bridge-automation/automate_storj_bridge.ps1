@@ -25,7 +25,7 @@
   To disable UPNP
   ./automate_storj_cli.ps1 -noupnp
 
-  POSSIBLE DELETE ###########
+POSSIBLE DELETE ###########
 
 .INPUTS
   -silent - [optional] this will write everything to a log file and prevent the script from running pause commands.
@@ -38,6 +38,7 @@
     -svcname [name] - required] Removes the service with this name (*becareful*)
 .OUTPUTS
   Return Codes (follows .msi standards) (https://msdn.microsoft.com/en-us/library/windows/desktop/aa376931(v=vs.85).aspx)
+
 #>
 
 #-----------------------------------------------------------[Parameters]------------------------------------------------------------
@@ -45,6 +46,10 @@
 param(
     [Parameter(Mandatory=$false)]
     [SWITCH]$silent,
+
+<#
+
+POSSIBLE DELETE
 
     [Parameter(Mandatory=$false)]
     [SWITCH]$noupnp,
@@ -64,13 +69,15 @@ param(
     [Parameter(Mandatory=$false)]
     [SWITCH]$removesvc,
 
+#>
+
     [parameter(Mandatory=$false,ValueFromRemainingArguments=$true)]
     [STRING]$other_args
  )
 
 #---------------------------------------------------------[Initialisations]--------------------------------------------------------
 
-$global:script_version="1.0 Release" # Script version
+$global:script_version="1.1 Release" # Script version
 $global:reboot_needed=""
 $global:noupnp=""
 $global:installsvc=""
@@ -126,6 +133,7 @@ function handleParameters() {
         LogWrite $message
     }
 
+<#
     #checks for noupnp flag
     if ($noupnp) {
         $global:noupnp="true"
@@ -164,6 +172,8 @@ function handleParameters() {
             $global:svcname="$svcname"
         }
     }
+
+#>
 
     #checks for unknown/invalid parameters referenced
     if ($other_args) {
@@ -662,11 +672,11 @@ function VisualStudioCheck([string]$version, [string]$dl_link) {
     }
 }
 
-function storjshare-cliCheck() {
-    LogWrite "Checking if storjshare-cli is installed..."
+function storj-bridgeCheck() {
+    LogWrite "Checking if storj-bridge is installed..."
 
     $Arguments = "list -g"
-    $output=(UseNPM $Arguments| Where-Object {$_ -like '*storjshare-cli*'})
+    $output=(UseNPM $Arguments| Where-Object {$_ -like '*storj-bridge*'})
 
     #write npm logs to log file if in silent mode
     if($silent) {
@@ -675,10 +685,10 @@ function storjshare-cliCheck() {
     }
 
     if (!$output.Length -gt 0) {
-        LogWrite "storjshare-cli is not installed."
-        LogWrite "Installing storjshare-cli (latest version released)..."
+        LogWrite "storj-bridge is not installed."
+        LogWrite "Installing storj-bridge (latest version released)..."
 
-        $Arguments = "install -g storjshare-cli"
+        $Arguments = "install -g storj-bridge"
         $result=(UseNPM $Arguments| Where-Object {$_ -like '*ERR!*'})
 
         #write npm logs to log file if in silent mode
@@ -688,19 +698,19 @@ function storjshare-cliCheck() {
         }
 
         if ($result.Length -gt 0) {
-            ErrorOut "storjshare-cli did not complete installation successfully...try manually installing it..."
+            ErrorOut "storj-bridge did not complete installation successfully...try manually installing it..."
         }
 
-        LogWrite -color Green "storjshare-cli Installed Successfully"
+        LogWrite -color Green "storj-bridge Installed Successfully"
     }
     else
     {
-        LogWrite "storjshare-cli already installed."
+        LogWrite "storj-bridge already installed."
 
-        LogWrite -color Cyan "Performing storjshare-cli Update..."
+        LogWrite -color Cyan "Performing storj-bridge Update..."
 
-        #$Arguments = "update -g storjshare-cli"
-        $Arguments = "install -g storjshare-cli"
+        #$Arguments = "update -g storj-bridge"
+        $Arguments = "install -g storj-bridge"
         $result=(UseNPM $Arguments| Where-Object {$_ -like '*ERR!*'})
 
         #write npm logs to log file if in silent mode
@@ -710,21 +720,21 @@ function storjshare-cliCheck() {
         }
 
         if ($result.Length -gt 0) {
-            ErrorOut "storjshare-cli did not complete update successfully...try manually updating it..."
+            ErrorOut "storj-bridge did not complete update successfully...try manually updating it..."
         }
         
-        LogWrite -color Green "storjshare-cli Update Completed"
+        LogWrite -color Green "storj-bridge Update Completed"
 
-        LogWrite -color Cyan "Checking storjshare-cli version..."
+        LogWrite -color Cyan "Checking storj-bridge version..."
 
-        $pos=$output.IndexOf("storjshare-cli@")
+        $pos=$output.IndexOf("storj-bridge@")
 
         $version = $output.Substring($pos+15)
         if(!$version) {
-            ErrorOut "storjshare-cli Version is Unknown - Error"
+            ErrorOut "storj-bridge Version is Unknown - Error"
         }
 
-        LogWrite -color Green "storjshare-cli Installed Version: $version"
+        LogWrite -color Green "storj-bridge Installed Version: $version"
     }
 }
 
@@ -1132,22 +1142,22 @@ LogWrite ""
 LogWrite -color Yellow "=============================================="
 checkRebootNeeded
 LogWrite ""
+LogWrite -color Cyan "Reviewing storj-bridge..."
+storj-bridgeCheck
+LogWrite -color Green "storj-bridge Review Completed"
+LogWrite ""
+LogWrite -color Yellow "=============================================="
+LogWrite ""
 LogWrite -color Cyan "You may now follow the remaining setup instructions here (if applicable):"
 LogWrite -color Cyan "https://github.com/Storj/bridge#manually"
 LogWrite ""
 LogWrite -color Yellow "=============================================="
 LogWrite -color Cyan "Completed storj-bridge Automated Management"
 LogWrite -color Yellow "=============================================="
-
+LogWrite -color Cyan "Reviewing storjshare-cli..."
 ErrorOut -code $global:return_code
 
 <#
-
-Possibly Delete
-LogWrite -color Cyan "Reviewing storjshare-cli..."
-storjshare-cliCheck
-LogWrite -color Green "storjshare-cli Review Completed"
-LogWrite ""
 LogWrite -color Yellow "=============================================="
 LogWrite ""
 LogWrite -color Cyan "Reviewing UPNP..."
