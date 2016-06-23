@@ -10,11 +10,11 @@
   Then it checks for storj-bridge
   Then it updates storj-bridge
 
-  POSSIBLE DELETE ###########
-
   Examples:
   To deploy silently use the following command
   ./automate_storj_cli.ps1 -silent
+
+  POSSIBLE DELETE ###########
 
   To install service use the following command
   ./automate_storj_cli.ps1 -installsvc -svcname storjshare -datadir C:\storjshare -password 4321
@@ -22,14 +22,14 @@
   To remove service use the following command
   ./automate_storj_cli.ps1 -removesvc -svcname storjshare
 
-  To disable UPNP
-  ./automate_storj_cli.ps1 -noupnp
-
 POSSIBLE DELETE ###########
+
+  To enable UPNP
+  ./automate_storj_cli.ps1 -enableupnp
 
 .INPUTS
   -silent - [optional] this will write everything to a log file and prevent the script from running pause commands.
-  -noupnp - [optional] Disables UPNP
+  -enableupnp - [optional] Enables UPNP
   -installsvc - [optional] Installs storjshare as a service (see the config section in the script to customize)
     -svcname [name] - [required] Installs the service with this name
     -datadir [directory] - [required] Data Directory of Storjshare
@@ -47,12 +47,12 @@ param(
     [Parameter(Mandatory=$false)]
     [SWITCH]$silent,
 
+    [Parameter(Mandatory=$false)]
+    [SWITCH]$enableupnp,
+
 <#
 
 POSSIBLE DELETE
-
-    [Parameter(Mandatory=$false)]
-    [SWITCH]$noupnp,
 
     [Parameter(Mandatory=$false)]
     [SWITCH]$installsvc,
@@ -77,9 +77,9 @@ POSSIBLE DELETE
 
 #---------------------------------------------------------[Initialisations]--------------------------------------------------------
 
-$global:script_version="1.1 Release" # Script version
+$global:script_version="1.2 Release" # Script version
 $global:reboot_needed=""
-$global:noupnp=""
+$global:enableupnp=""
 $global:installsvc=""
 $global:svcname=""
 $global:datadir=""
@@ -133,10 +133,9 @@ function handleParameters() {
         LogWrite $message
     }
 
-<#
     #checks for noupnp flag
-    if ($noupnp) {
-        $global:noupnp="true"
+    if ($enableupnp) {
+        $global:enableupnp="true"
     }
 
     #checks for installsvc flag
@@ -961,10 +960,10 @@ function SetUPNP([string]$upnp_set) {
 
 function CheckUPNP() {
     LogWrite "Checking UPNP Flag..."
-    if($global:noupnp) {
-        DisableUPNP
-    } else {
+    if($global:enableupnp) {
         EnableUPNP
+    } else {
+        DisableUPNP
     }
 }
 
@@ -1148,24 +1147,21 @@ LogWrite -color Green "storj-bridge Review Completed"
 LogWrite ""
 LogWrite -color Yellow "=============================================="
 LogWrite ""
-LogWrite -color Cyan "You may now follow the remaining setup instructions here (if applicable):"
-LogWrite -color Cyan "https://github.com/Storj/bridge#manually"
-LogWrite ""
-LogWrite -color Yellow "=============================================="
-LogWrite -color Cyan "Completed storj-bridge Automated Management"
-LogWrite -color Yellow "=============================================="
-LogWrite -color Cyan "Reviewing storjshare-cli..."
-ErrorOut -code $global:return_code
-
-<#
-LogWrite -color Yellow "=============================================="
-LogWrite ""
 LogWrite -color Cyan "Reviewing UPNP..."
 CheckUPNP
 LogWrite -color Green "UPNP Review Completed"
 LogWrite ""
 LogWrite -color Yellow "=============================================="
 LogWrite ""
+LogWrite -color Cyan "You may now follow the remaining setup instructions here (if applicable):"
+LogWrite -color Cyan "https://github.com/Storj/bridge#manually"
+LogWrite ""
+LogWrite -color Yellow "=============================================="
+LogWrite -color Cyan "Completed storj-bridge Automated Management"
+LogWrite -color Yellow "=============================================="
+ErrorOut -code $global:return_code
+
+<#
 LogWrite -color Cyan "Reviewing Service..."
 nssmCheck $nssm_ver
 LogWrite -color Green "Service Review Completed"
