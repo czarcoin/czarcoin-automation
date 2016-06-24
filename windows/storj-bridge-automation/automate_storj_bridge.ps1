@@ -14,28 +14,20 @@
   To deploy silently use the following command
   ./automate_storj_cli.ps1 -silent
 
-  POSSIBLE DELETE ###########
-
-  To install service use the following command
-  ./automate_storj_cli.ps1 -installsvc -svcname storjshare -datadir C:\storjshare -password 4321
-
-  To remove service use the following command
-  ./automate_storj_cli.ps1 -removesvc -svcname storjshare
-
-POSSIBLE DELETE ###########
-
   To enable UPNP
   ./automate_storj_cli.ps1 -enableupnp
+
+  To prevent the storj-bridge from being installed as a service
+  ./automate_storj_cli.ps1 -nosvc
+
+  To remove service use the following command
+  ./automate_storj_cli.ps1 -removesvc
 
 .INPUTS
   -silent - [optional] this will write everything to a log file and prevent the script from running pause commands.
   -enableupnp - [optional] Enables UPNP
-  -installsvc - [optional] Installs storjshare as a service (see the config section in the script to customize)
-    -svcname [name] - [required] Installs the service with this name
-    -datadir [directory] - [required] Data Directory of Storjshare
-    -password [password] - [required] Password for Storjshare Directory
+  -nosvc - [optional] Prevents storj-bridge from being installed as a service
   -removesvc - [optional] Removes storjshare as a service (see the config section in the script to customize)
-    -svcname [name] - required] Removes the service with this name (*becareful*)
 .OUTPUTS
   Return Codes (follows .msi standards) (https://msdn.microsoft.com/en-us/library/windows/desktop/aa376931(v=vs.85).aspx)
 
@@ -50,26 +42,11 @@ param(
     [Parameter(Mandatory=$false)]
     [SWITCH]$enableupnp,
 
-<#
-
-POSSIBLE DELETE
-
     [Parameter(Mandatory=$false)]
-    [SWITCH]$installsvc,
-
-    [Parameter(Mandatory=$false,ValueFromPipelineByPropertyName=$true)]
-    [STRING]$svcname,
-
-    [Parameter(Mandatory=$false,ValueFromPipelineByPropertyName=$true)]
-    [STRING]$datadir,
-
-    [Parameter(Mandatory=$false,ValueFromPipelineByPropertyName=$true)]
-    [STRING]$password,
+    [SWITCH]$nosvc,
 
     [Parameter(Mandatory=$false)]
     [SWITCH]$removesvc,
-
-#>
 
     [parameter(Mandatory=$false,ValueFromRemainingArguments=$true)]
     [STRING]$other_args
@@ -77,13 +54,10 @@ POSSIBLE DELETE
 
 #---------------------------------------------------------[Initialisations]--------------------------------------------------------
 
-$global:script_version="1.3 Release" # Script version
+$global:script_version="1.4 Release" # Script version
 $global:reboot_needed=""
 $global:enableupnp=""
-$global:installsvc=""
-$global:svcname=""
-$global:datadir=""
-$global:password=""
+$global:nosvc=""
 $global:error_success=0  #this is success
 $global:error_invalid_parameter=87 #this is failiure, invalid parameters referenced
 $global:error_install_failure=1603 #this is failure, A fatal error occured during installation (default error)
@@ -92,7 +66,6 @@ $global:error_success_reboot_required=3010  #this is success, but requests for r
 $global:return_code=$global:error_success #default success
 
 #----------------------------------------------------------[Declarations]----------------------------------------------------------
-
 
 $save_dir=$env:temp #path for downloaded files (Default: %TEMP%)
 $log_file='' + $save_dir + '\' + 'automate_storj_bridge.log'; #outputs everything to a file if -silent is used, instead of the console
@@ -121,9 +94,10 @@ $LowRiskFileTypes = ".exe"
 $nssm_ver="2.24" # (Default: 2.24)
 $nssm_location="$env:windir\System32" # Default windows directory
 $nssm_bin='' + $nssm_location + '\' + "nssm.exe" # (Default: %WINDIR%\System32\nssm.exe)
-$storjshare_bin='' + $env:appdata + '\' + "npm\storjshare.cmd" # Default: storjshare-cli location %APPDATA%\npm\storjshare.cmd"
+$storj_bridge_bin='' + $env:appdata + '\' + "npm\storj-bridge.cmd" # Default: storj-bridge location %APPDATA%\npm\storj-bridge.cmd"
 
-$storjshare_log="$save_dir\$global:svcname.log"
+$stor_bridge_svcname="storj-bridge"
+$storj_bridge_log="$save_dir\$stor_bridge_svcname.log"
 #-----------------------------------------------------------[Functions]------------------------------------------------------------
 
 function handleParameters() {
@@ -137,46 +111,19 @@ function handleParameters() {
         LogWrite $message
     }
 
-    #checks for noupnp flag
+    #checks for enableupnp flag
     if ($enableupnp) {
         $global:enableupnp="true"
     }
 
-    #checks for installsvc flag
-    if ($installsvc) {
-        $global:installsvc="true"
-
-        if(!($svcname)) {
-            ErrorOut -code $global:error_invalid_parameter "ERROR: Service Name not specified"
-        } else {
-            $global:svcname="$svcname"
-        }
-
-        if(!($datadir)) {
-            ErrorOut -code $global:error_invalid_parameter "ERROR: Service Name not specified"
-        } else {
-            $global:datadir="$datadir"
-        }
-
-        if(!($password)) {
-            ErrorOut -code $global:error_invalid_parameter "ERROR: Service Name not specified"
-        } else {
-            $global:password="$password"
-        }
+    if($nosvc) {
+        $global:nosvc="true"
     }
 
     #checks for removesvc flag
     if ($removesvc) {
         $global:removesvc="true"
-
-        if(!($svcname)) {
-            ErrorOut -code $global:error_invalid_parameter "ERROR: Service Name not specified"
-        } else {
-            $global:svcname="$svcname"
-        }
     }
-
-#>
 
     #checks for unknown/invalid parameters referenced
     if ($other_args) {
@@ -438,8 +385,6 @@ function GitForWindowsCheck([string]$version) {
             LogWrite -color Green "Git for Windows Updated Successfully"
             $installed_version = $gitforwindows_ver            
         }
-
-        LogWrite -color Green "Git for Windows Installed Version: $installed_version"
     }
 }
 
@@ -1007,7 +952,7 @@ function CheckUPNP() {
 }
 
 function CheckService([string]$svc_name) {
-    write-host "Checking if $svc_name Service is installed..."
+    LogWrite "Checking if $svc_name Service is installed..."
     if (Get-Service $svc_name -ErrorAction SilentlyContinue) {
         return 1
     } else {
@@ -1080,57 +1025,56 @@ function Installnssm([string]$save_location,[string]$arch) {
 }
 
 function nssmCheck([string]$version) {
-    if($global:installsvc -or $global:removesvc) {
-        LogWrite "Checking if NSSM is installed..."
 
-	    if(!(Test-Path $nssm_bin)) {
-            LogWrite "NSSM is not installed."
-            if ([System.IntPtr]::Size -eq 4) {
-                $arch="32-bit"
-                $arch_ver='win32'
+    if($global:removesvc) {
+        RemoveService $stor_bridge_svcname
+    }
+
+    if(!($global:nosvc)) {
+        if(!(CheckService $stor_bridge_svcname)) {
+            LogWrite "Checking if NSSM is installed..."
+	        if(!(Test-Path $nssm_bin)) {
+                LogWrite "NSSM is not installed."
+                if ([System.IntPtr]::Size -eq 4) {
+                    $arch="32-bit"
+                    $arch_ver='win32'
+                } else {
+                    $arch="64-bit"
+                    $arch_ver='win64'
+                }
+
+	            $filename = 'nssm-' + $version + '.zip';
+	            $save_path = '' + $save_dir + '\' + $filename;
+                $url='https://nssm.cc/release/' + $filename;
+	            if(!(Test-Path -pathType container $save_dir)) {
+		            ErrorOut "Save directory $save_dir does not exist"
+	            }
+
+                LogWrite "Downloading NSSM $version..."
+                DownloadFile $url $save_path
+                LogWrite "NSSM downloaded"
+
+                LogWrite "Installing NSSM $version..."
+                Installnssm $save_path $arch_ver
+
+                LogWrite -color Green "NSSM Installed Successfully"
             } else {
-                $arch="64-bit"
-                $arch_ver='win64'
+                 LogWrite -color Green "NSSM already installed, skipping"
             }
 
-	        $filename = 'nssm-' + $version + '.zip';
-	        $save_path = '' + $save_dir + '\' + $filename;
-            $url='https://nssm.cc/release/' + $filename;
-	        if(!(Test-Path -pathType container $save_dir)) {
-		        ErrorOut "Save directory $save_dir does not exist"
-	        }
-
-            LogWrite "Downloading NSSM $version..."
-            DownloadFile $url $save_path
-            LogWrite "NSSM downloaded"
-
-            LogWrite "Installing NSSM $version..."
-            Installnssm $save_path $arch_ver
-
-            LogWrite -color Green "NSSM Installed Successfully"
-        } else {
-             LogWrite -color Green "NSSM already installed"
-        }
-
-        LogWrite "Checking for $global:svcname to see if it exists"
-        RemoveService $global:svcname
-
-        if($global:installsvc) {
-
-            LogWrite "Checking if storjshare-cli data directory exists..."
-	        if(!(Test-Path -pathType container $global:datadir)) {
-	            ErrorOut "sorjshare-cli directory $global:datadir does not exist, you may want to setup storjshare-cli first.";
-	        }
-
-            LogWrite "Installing service $global:svcname"
-            $Arguments="install $global:svcname $storjshare_bin start --datadir $global:datadir --password $global:password >> $storjshare_log"
+            LogWrite "Installing service $stor_bridge_svcname"
+            $Arguments="install $stor_bridge_svcname $storj_bridge_bin >> $storj_bridge_log"
             $results=UseNSSM $Arguments
-            if(CheckService($global:svcname)) {
-                LogWrite -color Green "Service $global:svcname Installed Successfully"
+            if(CheckService($stor_bridge_svcname)) {
+                LogWrite -color Green "Service $stor_bridge_svcname Installed Successfully"
             } else {
-                ErrorOut "Failed to install service $global:svcname"
+                ErrorOut "Failed to install service $stor_bridge_svcname"
             }
+        } else {
+            LogWrite "Service $stor_bridge_svcname already installed, skipping"
         }
+    } else {
+        LogWrite -color Green "Skipping Service Check/Installation - No Service Parameter passed"
     }
 }
 #-----------------------------------------------------------[Execution]------------------------------------------------------------
@@ -1186,6 +1130,12 @@ LogWrite -color Green "storj-bridge Review Completed"
 LogWrite ""
 LogWrite -color Yellow "=============================================="
 LogWrite ""
+LogWrite -color Cyan "Reviewing Service..."
+nssmCheck $nssm_ver
+LogWrite -color Green "Service Review Completed"
+LogWrite ""
+LogWrite -color Yellow "=============================================="
+LogWrite ""
 LogWrite -color Cyan "Reviewing UPNP..."
 CheckUPNP
 LogWrite -color Green "UPNP Review Completed"
@@ -1199,20 +1149,3 @@ LogWrite -color Yellow "=============================================="
 LogWrite -color Cyan "Completed storj-bridge Automated Management"
 LogWrite -color Yellow "=============================================="
 ErrorOut -code $global:return_code
-
-<#
-LogWrite -color Cyan "Reviewing Service..."
-nssmCheck $nssm_ver
-LogWrite -color Green "Service Review Completed"
-LogWrite ""
-LogWrite -color Yellow "=============================================="
-LogWrite ""
-LogWrite -color Cyan "You may now follow the remaining setup instructions here (if applicable):"
-LogWrite -color Cyan "https://github.com/Storj/storjshare-cli#installation"
-LogWrite ""
-LogWrite -color Yellow "=============================================="
-LogWrite -color Cyan "Completed storjshare-cli Automated Management"
-LogWrite -color Yellow "=============================================="
-
-ErrorOut -code $global:return_code
-#>
