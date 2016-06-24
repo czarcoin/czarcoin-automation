@@ -77,7 +77,7 @@ POSSIBLE DELETE
 
 #---------------------------------------------------------[Initialisations]--------------------------------------------------------
 
-$global:script_version="1.2 Release" # Script version
+$global:script_version="1.3 Release" # Script version
 $global:reboot_needed=""
 $global:enableupnp=""
 $global:installsvc=""
@@ -98,6 +98,10 @@ $save_dir=$env:temp #path for downloaded files (Default: %TEMP%)
 $log_file='' + $save_dir + '\' + 'automate_storj_bridge.log'; #outputs everything to a file if -silent is used, instead of the console
 
 $mongodb_ver="3.2.7" # (Default: 3.2.7)
+$mongodb_log='' + $save_dir + '\' + 'mongodb.log'; #Default: %TEMP%\mongodb.log
+$mongodb_dbpath='' + $env:userprofile + '\' + '.storj-bridge\mongodb'; #Default %USERPROFILE%\.storj-bridge\
+$mongodb_svc_name="MongoDB"
+$mongod_path='' + $env:programfiles + '\MongoDB\Server\3.2\bin\mongod.exe'; #Default %PROGRAMFILES%\MongoDB\Server\3.2\bin\mongod.exe
 
 $gitforwindows_ver="2.8.3"  #   (Default: 2.8.3)
 
@@ -307,6 +311,41 @@ function MongoDBCheck([string]$version) {
         }
 
         LogWrite -color Green "MongoDB Installed Version: $installed_version"
+    }
+
+    LogWrite "Checking for MongoDB Service"
+
+    if(CheckService($mongodb_svc_name)) {
+        LogWrite "MongoDB Service Already Installed, skipping..."
+    } else {
+        LogWrite "Installing MongoDB Service"
+
+        if(!(Test-Path -pathType container $mongodb_dbpath)) {
+		    LogWrite "Database Directory $mongodb_dbpath does not exist, creating..."
+
+            New-Item $mongodb_dbpath -type directory -force
+
+            if(!(Test-Path -pathType container $mongodb_dbpath)) {
+		        ErrorOut "Database Directory $mongodb_dbpath failed to create, try it manually..."
+	        }
+	    }
+
+ 	    if(!(Test-Path -pathType container $save_dir)) {
+		    ErrorOut "Log Directory $save_dir does not exist"
+	    }
+
+        $Arguments="--install "
+        $Arguments+="--dbpath $mongodb_dbpath "
+        $Arguments+="--logpath $mongodb_log"
+
+        Start-Process "`"$mongod_path`"" -ArgumentList $Arguments -Wait
+
+        if(CheckService($mongodb_svc_name)) {
+            LogWrite -color Green "MongoDB Service Installed Successfully"
+            $global:reboot_needed="true"
+        } else {
+            ErrorOut "MongoDB Service Failed to Install...try it manually..."
+        }
     }
 }
 
