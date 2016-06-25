@@ -1,13 +1,13 @@
-Automates the installation of storjshare-cli for Windows only
+Automates the installation of storj-bridge for Windows only
 <br/>
 <br/>INSTRUCTIONS:
-<br/>1.) Download Latest Release of storj-automation (`https://github.com/Storj/storj-automation/archive/master.zip`)
-<br/>2.) Extract ZIP, and navigate to `storj-automation-master\windows\storjshare-cli-automate`
+<br/>1.) Download ZIP of storjshare-bridge-automate
+<br/>2.) Extract ZIP
 <br/>3.) Double-click `install.bat`
 <br/>4.) (if prompted) Click Yes on the User Account Control (UAC) screen
 <br/>5.) Reboot when completed
 <br/>6.) Double-click `install.bat`
-<br/>7.) Installation should be completed. Follow `https://github.com/Storj/storjshare-cli#usage` to complete.
+<br/>7.) Installation should be completed.  Configure storj-bridge as needed.
 <br/>
 <br/>COMPATIBILITY:
 <br/>   -PowerShell Version 2 or newer
@@ -15,7 +15,7 @@ Automates the installation of storjshare-cli for Windows only
 <br/>   -Client OS: Windows 7 or newer
 <br/>   -Server OS: Windows 2008 or newer
 <br/>
-<br/>ADVANCED FUNCTIONALITY:
+<br/>ADVANCED FUNCTIONALITY: (TBD - may be removed!!!!)
 <br/>  Examples:
 <br/>  To deploy silently use the following command
 <br/>  ./automate_storj_cli.ps1 -silent
@@ -29,7 +29,3 @@ Automates the installation of storjshare-cli for Windows only
 <br/>  To disable UPNP
 <br/>  ./automate_storj_cli.ps1 -noupnp
 <br/>
-<br/>TODO:
-<br/>   -Perform uninstall of pre-requirements and storj-cli
-<br/>   -Modify configuration of instance
-<br/>   -Setup storjshare-cli through commands
