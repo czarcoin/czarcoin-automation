@@ -23,6 +23,7 @@ This default configuration of the script automates the following functions:
 
 ### Usage Instructions
 
+```
 1.) Download Latest Release of storj-automation - https://github.com/Storj/storj-automation/archive/master.zip
 2.) Extract the ZIP, and navigate to `storj-automation-master\windows\storjshare-bridge-automate`
 3.) Double-click `install.bat`
@@ -30,6 +31,7 @@ This default configuration of the script automates the following functions:
 5.) Reboot when completed
 6.) Double-click `install.bat`
 7.) Installation should now be completed. Follow xxx to complete.
+```
 
 ### Advanced Functionality:
 
@@ -47,3 +49,9 @@ To remove service use the following command
 To enable UPNP
 `./automate_storj_bridge.ps1 -enableupnp`
 
+To run as a service account (*recommended for automated dpeloyment situations*)
+`./automate_storj_bridge.ps1 -runas -username username -password 'password'`
+
+### Output Results
+In silent mode, the output error numbers coincide with Microsoft's MSI standards
+Return Codes (https://msdn.microsoft.com/en-us/library/windows/desktop/aa376931(v=vs.85).aspx)
