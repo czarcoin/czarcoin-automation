@@ -25,7 +25,6 @@
 
   To run as a service account
   ./automate_storj_bridge.ps1 -runas -username username -password password
-  YOU MUST GRANT THE SERVICE ACCOUNT : LOGON AS SERVICE RIGHTS
 
 .INPUTS
   -silent - [optional] this will write everything to a log file and prevent the script from running pause commands.
@@ -71,33 +70,31 @@ param(
 
 #---------------------------------------------------------[Initialisations]--------------------------------------------------------
 
-$global:script_version="1.6 Release" # Script version
+$global:script_version="2.0 Release" # Script version
 $global:reboot_needed=""
 $global:enableupnp=""
 $global:nosvc=""
 $global:runas=""
 $global:username=""
 $global:password=""
-$global:error_success=0  #this is success
-$global:error_invalid_parameter=87 #this is failiure, invalid parameters referenced
-$global:error_install_failure=1603 #this is failure, A fatal error occured during installation (default error)
-$global:error_success_reboot_required=3010  #this is success, but requests for reboot
-$global:return_code=$global:error_success #default success
-$global:save_dir='' + $env:windir + '\Temp\storj\bridge' # (Default: %WINDIR%\Temp\storj\bridge)
+$global:return_code=$error_success #default success
 $global:user_profile=$env:userprofile # (Default: %USERPROFILE%) - runas overwrites this variable
 $global:appdata=$env:appdata # (Default: %APPDATA%) - runas overwrites this variable
-$global:log_path='' + $env:windir + '\Temp\storj\bridge' # (Default: %WINDIR%\Temp\storj\bridge)
-$global:log_file=$global:log_path + '\' + 'automate_storj_bridge.log'; #outputs everything to a file if -silent is used, instead of the console
 $global:mongodb_dbpath='' + $global:user_profile + '\' + '.storj-bridge\mongodb'; #Default %USERPROFILE%\.storj-bridge\ - runas overwrites this variable
 $global:storj_bridge_bin='' + $global:appdata + "npm\storj-bridge.cmd" # Default: storj-bridge location %APPDATA%\npm\storj-bridge.cmd" - runas overwrites this variable
 
 #----------------------------------------------------------[Declarations]----------------------------------------------------------
 
+$windows_env=$env:windir
+$save_dir='' + $windows_env + '\Temp\storj\installs' # (Default: %WINDIR%\Temp\storj\bridge)
+$log_path='' + $windows_env + '\Temp\storj\bridge' # (Default: %WINDIR%\Temp\storj\bridge)
+$log_file=$log_path + '\' + 'automate_storj_bridge.log'; #outputs everything to a file if -silent is used, instead of the console
+
 $mongodb_ver="3.2.7" # (Default: 3.2.7)
 $mongodb_svc_name="MongoDB"
 $mongod_path='' + $env:programfiles + '\MongoDB\Server\3.2\bin\' #Default %PROGRAMFILES%\MongoDB\Server\3.2\bin\
 $mongod_exe='' + $mongod_path + 'mongod.exe'; #Default: \mongod.exe
-$mongodb_log='' + $global:save_dir + '\' + 'mongodb.log'; #Default: %TEMP%\mongodb.log - runas overwrites this variable
+$mongodb_log='' + $log_path + '\' + 'mongodb.log'; #Default: %TEMP%\mongodb.log - runas overwrites this variable
 
 $gitforwindows_ver="2.8.3"  #   (Default: 2.8.3)
 
@@ -120,13 +117,35 @@ $nssm_location="$env:windir\System32" # Default windows directory
 $nssm_bin='' + $nssm_location + '\' + "nssm.exe" # (Default: %WINDIR%\System32\nssm.exe)
 
 $stor_bridge_svcname="storj-bridge"
-$storj_bridge_log="$global:save_dir\$stor_bridge_svcname.log"
+$storj_bridge_log="$log_path\$stor_bridge_svcname.log"
+
+$error_success=0  #this is success
+$error_invalid_parameter=87 #this is failiure, invalid parameters referenced
+$error_install_failure=1603 #this is failure, A fatal error occured during installation (default error)
+$error_success_reboot_required=3010  #this is success, but requests for reboot
 
 #-----------------------------------------------------------[Functions]------------------------------------------------------------
 
 function handleParameters() {
+
+    if(!(Test-Path -pathType container $log_path)) {
+        New-Item $save_dir -type directory -force
+    }
+
+    if(!(Test-Path -pathType container $log_path)) {
+		ErrorOut "Log Directory $save_dir failed to create, try it manually..."
+	}
+
+    if(!(Test-Path -pathType container $save_dir)) {
+        New-Item $save_dir -type directory -force
+    }
+
+    if(!(Test-Path -pathType container $save_dir)) {
+		ErrorOut "Save Directory $save_dir failed to create, try it manually..."
+	}
+
     if($silent) {
-        LogWrite "Logging to file $global:log_file"
+        LogWrite "Logging to file $log_file"
     }
     else
     {
@@ -138,22 +157,19 @@ function handleParameters() {
         $global:runas="true"
 
         if(!($username)) {
-            ErrorOut -code $global:error_invalid_parameter "ERROR: Username not specified"
+            ErrorOut -code $error_invalid_parameter "ERROR: Username not specified"
         } else {
             $global:username="$username"
         }
 
         if(!($password)) {
-            ErrorOut -code $global:error_invalid_parameter "ERROR: Password not specified"
+            ErrorOut -code $error_invalid_parameter "ERROR: Password not specified"
         } else {
             $global:password="$password"
         }
 
         $global:securePassword = ConvertTo-SecureString $global:password -AsPlainText -Force
         $global:credential = New-Object System.Management.Automation.PSCredential $global:username, $global:securePassword
-
-        $save_dir=GetUserEnvironment "%TEMP%"
-        $global:save_dir=$save_dir.Substring(0,$save_dir.Length-1) + '\Temp\storj\bridge'
 
         $user_profile=GetUserEnvironment "%USERPROFILE%"
         $global:user_profile=$user_profile.Substring(0,$user_profile.Length-1)
@@ -166,6 +182,9 @@ function handleParameters() {
         $global:storj_bridge_bin='' + $global:appdata + '\' + "npm\storj-bridge.cmd"
 
         LogWrite "Using Service Account: $global:username"
+
+        LogWrite "Granting $global:username Logon As A Service Right"
+        Grant-LogOnAsService $global:username
     }
 
     if ($enableupnp) {
@@ -182,16 +201,8 @@ function handleParameters() {
 
     #checks for unknown/invalid parameters referenced
     if ($other_args) {
-        ErrorOut -code $global:error_invalid_parameter "ERROR: Unknown arguments: $args"
+        ErrorOut -code $error_invalid_parameter "ERROR: Unknown arguments: $args"
     }
-
-    if(!(Test-Path -pathType container $global:save_dir)) {
-        New-Item $global:save_dir -type directory -force
-    }
-
-    if(!(Test-Path -pathType container $global:save_dir)) {
-		ErrorOut "Save Directory $global:save_dir failed to create, try it manually..."
-	}
 }
 
 Function LogWrite([string]$logstring,[string]$color) {
@@ -199,15 +210,15 @@ Function LogWrite([string]$logstring,[string]$color) {
     $logmessage="["+$LogTime+"] "+$logstring
     if($silent) {
         if($logstring) {
-            if(!(Test-Path -pathType container $global:log_path)) {
-                
-                New-Item $global:log_path -type directory -force
+            if(!(Test-Path -pathType container $log_path)) {
 
-                if(!(Test-Path -pathType container $global:log_path)) {
-		            ErrorOut "Log Directory $global:log_path failed to create, try it manually..."
+                New-Item $log_path -type directory -force
+
+                if(!(Test-Path -pathType container $log_path)) {
+		            ErrorOut "Log Directory $log_path failed to create, try it manually..."
 	            }
 	        }
-            Add-content $global:log_file -value $logmessage
+            Add-content $log_file -value $logmessage
         }
     } else {
         if(!$logstring) {
@@ -222,7 +233,7 @@ Function LogWrite([string]$logstring,[string]$color) {
     }
 }
 
-function ErrorOut([string]$message,[int]$code=$global:error_install_failure) {
+function ErrorOut([string]$message,[int]$code=$error_install_failure) {
     LogWrite -color Red $message
     
     if($silent) {
@@ -253,10 +264,10 @@ function MongoDBCheck([string]$version) {
         }
 
 	    $filename = 'mongodb-win32' + $arch_ver + '-' + $version + '-signed.msi';
-	    $save_path = '' + $global:save_dir + '\' + $filename;
+	    $save_path = '' + $save_dir + '\' + $filename;
         $url='http://downloads.mongodb.org/win32/' + $filename;
-	    if(!(Test-Path -pathType container $global:save_dir)) {
-		    ErrorOut "Save directory $global:save_dir does not exist"
+	    if(!(Test-Path -pathType container $save_path)) {
+		    ErrorOut "Save directory $save_path does not exist"
 	    }
 
         LogWrite "Downloading MongoDB ($arch) $version..."
@@ -305,10 +316,10 @@ function MongoDBCheck([string]$version) {
             }
 
             $filename = 'mongodb-win32' + $arch_ver + '-' + $mongodb_ver + '-signed.msi';
-	        $save_path = '' + $global:save_dir + '\' + $filename;
+	        $save_path = '' + $save_dir + '\' + $filename;
             $url='http://downloads.mongodb.org/win32/' + $filename;
-	        if(!(Test-Path -pathType container $global:save_dir)) {
-		        ErrorOut "Save directory $global:save_dir does not exist"
+	        if(!(Test-Path -pathType container $save_dir)) {
+		        ErrorOut "Save directory $save_dir does not exist"
 	        }
 
             LogWrite "Downloading MongoDB ($arch) $mongodb_ver..."
@@ -347,15 +358,15 @@ function MongoDBCheck([string]$version) {
 	        }
 	    }
 
- 	    if(!(Test-Path -pathType container $global:save_dir)) {
-		    ErrorOut "Log Directory $global:save_dir does not exist"
+ 	    if(!(Test-Path -pathType container $save_dir)) {
+		    ErrorOut "Log Directory $save_dir does not exist"
 	    }
 
         $Arguments="--install "
         $Arguments+="--dbpath $global:mongodb_dbpath "
         $Arguments+="--logpath $mongodb_log"
 
-        Start-Process "`"$mongod_exe`"" -ArgumentList $Arguments -Wait
+        Start-Process "`"$mongod_exe`"" -ArgumentList $Arguments -NoNewWindow -Wait
 
         if(CheckService($mongodb_svc_name)) {
             LogWrite -color Green "MongoDB Service Installed Successfully"
@@ -383,10 +394,10 @@ function GitForWindowsCheck([string]$version) {
         }
 
 	    $filename = 'Git-' + $version + $arch_ver + '.exe';
-	    $save_path = '' + $global:save_dir + '\' + $filename;
+	    $save_path = '' + $save_dir + '\' + $filename;
         $url='https://github.com/git-for-windows/git/releases/download/v' + $version + '.windows.1/' + $filename;
-	    if(!(Test-Path -pathType container $global:save_dir)) {
-		    ErrorOut "Save directory $global:save_dir does not exist"
+	    if(!(Test-Path -pathType container $save_dir)) {
+		    ErrorOut "Save directory $save_dir does not exist"
 	    }
 
         LogWrite "Downloading Git for Windows ($arch) $version..."
@@ -437,10 +448,10 @@ function GitForWindowsCheck([string]$version) {
             }
 
     	    $filename = 'Git-' + $gitforwindows_ver + $arch_ver + '.exe';
-	        $save_path = '' + $global:save_dir + '\' + $filename;
+	        $save_path = '' + $save_dir + '\' + $filename;
             $url='https://github.com/git-for-windows/git/releases/download/v' + $gitforwindows_ver + '.windows.1/' + $filename;
-	        if(!(Test-Path -pathType container $global:save_dir)) {
-		        ErrorOut "Save directory $global:save_dir does not exist"
+	        if(!(Test-Path -pathType container $save_dir)) {
+		        ErrorOut "Save directory $save_dir does not exist"
 	        }
 
             LogWrite "Downloading Git for Windows ($arch) $gitforwindows_ver..."
@@ -475,10 +486,10 @@ function NodejsCheck([string]$version) {
         }
 
 	    $filename = 'node-v' + $version + $arch_ver + '.msi';
-	    $save_path = '' + $global:save_dir + '\' + $filename;
+	    $save_path = '' + $save_dir + '\' + $filename;
         $url='https://nodejs.org/dist/v' + $version + '/' + $filename;
-	    if(!(Test-Path -pathType container $global:save_dir)) {
-		    ErrorOut "Save directory $global:save_dir does not exist";
+	    if(!(Test-Path -pathType container $save_dir)) {
+		    ErrorOut "Save directory $save_dir does not exist";
 	    }
 
         LogWrite "Downloading Node.js LTS ($arch) $version..."
@@ -527,10 +538,10 @@ function NodejsCheck([string]$version) {
             }
 
 	        $filename = 'node-v' + $nodejs_ver + $arch_ver + '.msi';
-	        $save_path = '' + $global:save_dir + '\' + $filename;
+	        $save_path = '' + $save_dir + '\' + $filename;
             $url='https://nodejs.org/dist/v' + $nodejs_ver + '/' + $filename;
-	        if(!(Test-Path -pathType container $global:save_dir)) {
-		        ErrorOut "Save directory $global:save_dir does not exist";
+	        if(!(Test-Path -pathType container $save_dir)) {
+		        ErrorOut "Save directory $save_dir does not exist";
 	        }
 
             LogWrite "Downloading Node.js LTS ($arch) $nodejs_ver..."
@@ -581,10 +592,10 @@ function PythonCheck([string]$version) {
         }
 
 	    $filename = 'python-' + $version + $arch_ver + '.msi';
-	    $save_path = '' + $global:save_dir + '\' + $filename;
+	    $save_path = '' + $save_dir + '\' + $filename;
         $url='http://www.python.org/ftp/python/' + $version + '/' + $filename;
-	    if(!(Test-Path -pathType container $global:save_dir)) {
-		    ErrorOut "Save directory $global:save_dir does not exist";
+	    if(!(Test-Path -pathType container $save_dir)) {
+		    ErrorOut "Save directory $save_dir does not exist";
 	    }
 
         LogWrite "Downloading Python ($arch) $version..."
@@ -638,10 +649,10 @@ function PythonCheck([string]$version) {
             }
 
 	        $filename = 'python-' + $python_ver + $arch_ver + '.msi';
-	        $save_path = '' + $global:save_dir + '\' + $filename;
+	        $save_path = '' + $save_dir + '\' + $filename;
             $url='http://www.python.org/ftp/python/' + $python_ver + '/' + $filename;
-	        if(!(Test-Path -pathType container $global:save_dir)) {
-		        ErrorOut "Save directory $global:save_dir does not exist";
+	        if(!(Test-Path -pathType container $save_dir)) {
+		        ErrorOut "Save directory $save_dir does not exist";
 	        }
 
             LogWrite "Downloading Python ($arch) $python_ver..."
@@ -696,9 +707,9 @@ function VisualStudioCheck([string]$version, [string]$dl_link) {
     If(!(Get-IsProgramInstalled "Microsoft Visual Studio Community")) {
         LogWrite "Visual Studio Community $version Edition is not installed."
         $filename = 'vs_community_ENU.exe';
-	    $save_path = '' + $global:save_dir + '\' + $filename;
-	    if(!(Test-Path -pathType container $global:save_dir)) {
-		    ErrorOut "Save directory $global:save_dir does not exist";
+	    $save_path = '' + $save_dir + '\' + $filename;
+	    if(!(Test-Path -pathType container $save_dir)) {
+		    ErrorOut "Save directory $save_dir does not exist";
 	    }
 
         LogWrite "Downloading Visual Studio Community $version Edition..."
@@ -752,7 +763,7 @@ function storj-bridgeCheck() {
     #write npm logs to log file if in silent mode
     if($silent) {
         LogWrite "npm $Arguments results"
-        Add-content $global:log_file -value $output
+        Add-content $log_file -value $output
     }
 
     if (!$output.Length -gt 0) {
@@ -765,7 +776,7 @@ function storj-bridgeCheck() {
         #write npm logs to log file if in silent mode
         if($silent) {
             LogWrite "npm $Arguments results"
-            Add-content $global:log_file -value $result
+            Add-content $log_file -value $result
         }
 
         if ($result.Length -gt 0) {
@@ -787,7 +798,7 @@ function storj-bridgeCheck() {
         #write npm logs to log file if in silent mode
         if($silent) {
             LogWrite "npm $Arguments results"
-            Add-content $global:log_file -value $result
+            Add-content $log_file -value $result
         }
 
         if ($result.Length -gt 0) {
@@ -890,7 +901,7 @@ function RemoveLowRiskFiles() {
 function InstallEXE([string]$installer, [string]$Arguments) {
 	Unblock-File $installer
 	AddLowRiskFiles
-    Start-Process "`"$installer`"" -ArgumentList $Arguments -Wait
+    Start-Process "`"$installer`"" -ArgumentList $Arguments -Wait -NoNewWindow
 	RemoveLowRiskFiles
 }
 
@@ -902,26 +913,28 @@ function InstallMSI([string]$installer) {
 	$Arguments += "/passive"
 	$Arguments += "/norestart"
 
-    Start-Process "msiexec.exe" -ArgumentList $Arguments -Wait
+    Start-Process "msiexec.exe" -ArgumentList $Arguments -Wait -NoNewWindow
 }
 
 function UseNPM([string]$Arguments) {
 	$filename = 'npm_output.log';
-	$save_path = '' + $global:save_dir + '\' + $filename;
+	$save_path = '' + $log_path + '\' + $filename;
 
 	$filename_err = 'npm_output_err.log';
-	$save_path_err = '' + $global:save_dir + '\' + $filename_err;
-	if(!(Test-Path -pathType container $global:save_dir)) {
-	    ErrorOut "Save directory $global:save_dir does not exist";
+	$save_path_err = '' + $log_path + '\' + $filename_err;
+	if(!(Test-Path -pathType container $log_path)) {
+	    ErrorOut "Log directory $log_path does not exist";
 	}
 
     if($global:runas) {
-        $proc = Start-Process "npm" -Credential $global:credential -WorkingDirectory "$npm_path" -ArgumentList $Arguments -RedirectStandardOutput "$save_path" -RedirectStandardError "$save_path_err" -Passthru
+        $proc = Start-Process "npm" -Credential $global:credential -WorkingDirectory "$npm_path" -ArgumentList $Arguments -RedirectStandardOutput "$save_path" -RedirectStandardError "$save_path_err" -NoNewWindow
     } else {
-        $proc = Start-Process "npm" -ArgumentList $Arguments -RedirectStandardOutput "$save_path" -RedirectStandardError "$save_path_err" -Passthru
+        $proc = Start-Process "npm" -ArgumentList $Arguments -RedirectStandardOutput "$save_path" -RedirectStandardError "$save_path_err" -NoNewWindow
     }
 
-    $proc.WaitForExit()
+    Start-Sleep -s 3
+    $processnpm=Get-Process | Where-Object { $_.MainWindowTitle -like '*npm' } | select -expand id
+    Wait-Process -Id $processnpm -Timeout 600 -ErrorAction SilentlyContinue
 
     if(!(Test-Path $save_path) -or !(Test-Path $save_path_err)) {
         ErrorOut "npm command $Arguments failed to execute...try manually running it..."
@@ -932,7 +945,7 @@ function UseNPM([string]$Arguments) {
 
     Remove-Item "$save_path"
     Remove-Item "$save_path_err"
-    
+
     return $results
 }
 
@@ -941,7 +954,7 @@ function CheckRebootNeeded() {
         LogWrite -color Red "=============================================="
         LogWrite -color Red "~~~PLEASE REBOOT BEFORE PROCEEDING~~~"
         LogWrite -color White "After the reboot, re-launch this script to complete the installation"
-        ErrorOut -code $global:error_success_reboot_required "~~~PLEASE REBOOT BEFORE PROCEEDING~~~"        
+        ErrorOut -code $error_success_reboot_required "~~~PLEASE REBOOT BEFORE PROCEEDING~~~"        
     } else {
         LogWrite -color Green "No Reboot Needed, continuing on with script"
     }
@@ -1018,15 +1031,14 @@ function DisableUPNP() {
 
 function SetUPNP([string]$upnp_set) {
 	$filename = 'upnp_output.log';
-	$save_path = '' + $global:save_dir + '\' + $filename;
-	if(!(Test-Path -pathType container $global:save_dir)) {
-	    ErrorOut "Save directory $global:save_dir does not exist";
+	$save_path = '' + $log_path + '\' + $filename;
+	if(!(Test-Path -pathType container $log_path)) {
+	    ErrorOut "Log directory $log_path does not exist";
 	}
 	
     $Arguments="advfirewall firewall set rule group=`"Network Discovery`" new enable=$($upnp_set)"
     
-    $proc = Start-Process "netsh" -ArgumentList $Arguments -RedirectStandardOutput "$save_path" -Passthru
-    $proc.WaitForExit()
+    $proc = Start-Process "netsh" -ArgumentList $Arguments -RedirectStandardOutput "$save_path" -Wait -NoNewWindow
 
     if(!(Test-Path $save_path)) {
         ErrorOut "npm command $Arguments failed to execute...try manually running it..."
@@ -1077,13 +1089,12 @@ function RemoveService([string]$svc_name) {
 
 function UseNSSM([string]$Arguments) {
 	$filename = 'nssm_output.log';
-	$save_path = '' + $global:save_dir + '\' + $filename;
-	if(!(Test-Path -pathType container $global:save_dir)) {
-	    ErrorOut "Save directory $global:save_dir does not exist";
+	$save_path = '' + $log_path + '\' + $filename;
+	if(!(Test-Path -pathType container $log_path)) {
+	    ErrorOut "Save directory $log_path does not exist";
 	}
 	
-    $proc = Start-Process "nssm" -ArgumentList $Arguments -RedirectStandardOutput "$save_path" -Passthru
-    $proc.WaitForExit()
+    $proc = Start-Process "nssm" -ArgumentList $Arguments -RedirectStandardOutput "$save_path" -Wait -NoNewWindow
 
     if(!(Test-Path $save_path)) {
         ErrorOut "nssm command $Arguments failed to execute..."
@@ -1101,13 +1112,13 @@ function Installnssm([string]$save_location,[string]$arch) {
 
         $filename=Split-Path $save_location -leaf
         $filename=$filename.Substring(0,$filename.Length-4)
-        $extracted_folder="$global:save_dir\$filename"
+        $extracted_folder="$save_dir\$filename"
         if(Test-Path -pathType container $extracted_folder) {
 		    LogWrite "Skipping extraction...extracted folder already exists"
 	    } else {
             LogWrite "Extracting NSSM zip"
             Add-Type -assembly "system.io.compression.filesystem"
-            [io.compression.zipfile]::ExtractToDirectory($save_location, $global:save_dir)
+            [io.compression.zipfile]::ExtractToDirectory($save_location, $save_dir)
             LogWrite "Extracted NSSM successfully"
         }
 
@@ -1144,10 +1155,10 @@ function nssmCheck([string]$version) {
                 }
 
 	            $filename = 'nssm-' + $version + '.zip';
-	            $save_path = '' + $global:save_dir + '\' + $filename;
+	            $save_path = '' + $save_dir + '\' + $filename;
                 $url='https://nssm.cc/release/' + $filename;
-	            if(!(Test-Path -pathType container $global:save_dir)) {
-		            ErrorOut "Save directory $global:save_dir does not exist"
+	            if(!(Test-Path -pathType container $save_dir)) {
+		            ErrorOut "Save directory $save_dir does not exist"
 	            }
 
                 LogWrite "Downloading NSSM $version..."
@@ -1184,15 +1195,14 @@ function nssmCheck([string]$version) {
 
 function GetUserEnvironment([string]$env_var) {
 	$filename = 'user_env.log';
-	$save_path = '' + $global:log_path + '\' + $filename;
+	$save_path = '' + $log_path + '\' + $filename;
 
-	if(!(Test-Path -pathType container $global:log_path)) {
-	    ErrorOut "Save directory $global:log_path does not exist";
+	if(!(Test-Path -pathType container $log_path)) {
+	    ErrorOut "Save directory $log_path does not exist";
 	}
 
     $Arguments="/c ECHO $env_var"
-    $proc = Start-Process "cmd.exe" -Credential $global:credential -Workingdirectory "$env:windir\System32" -ArgumentList $Arguments -RedirectStandardOutput "$save_path" -Passthru
-    $proc.WaitForExit()
+    $proc = Start-Process "cmd.exe" -Credential $global:credential -Workingdirectory "$env:windir\System32" -ArgumentList $Arguments -RedirectStandardOutput "$save_path" -Wait -NoNewWindow
 
     if(!(Test-Path $save_path)) {
         ErrorOut "cmd command $Arguments failed to execute...try manually running it..."
@@ -1203,6 +1213,40 @@ function GetUserEnvironment([string]$env_var) {
     Remove-Item "$save_path"
     
     return $results
+}
+
+function Grant-LogOnAsService{
+param(
+    [string[]] $users
+    )
+    #Get list of currently used SIDs 
+    secedit /export /cfg "$log_path\tempexport.inf"
+    $curSIDs = Select-String "$log_path\tempexport.inf" -Pattern "SeServiceLogonRight" 
+    $Sids = $curSIDs.line 
+    $sidstring = ""
+    foreach($user in $users){
+        $objUser = New-Object System.Security.Principal.NTAccount($user)
+        $strSID = $objUser.Translate([System.Security.Principal.SecurityIdentifier])
+        if(!$Sids.Contains($strSID) -and !$sids.Contains($user)){
+            $sidstring += ",*$strSID"
+        }
+    }
+    if($sidstring){
+        $newSids = $sids + $sidstring
+        LogWrite "New Sids: $newSids"
+        $tempinf = Get-Content "$log_path\tempexport.inf"
+        $tempinf = $tempinf.Replace($Sids,$newSids)
+        Add-Content -Path "$log_path\tempimport.inf" -Value $tempinf
+        secedit /import /db "$log_path\secedit.sdb" /cfg "$log_path\tempimport.inf" 
+        secedit /configure /db "$log_path\secedit.sdb"
+ 
+        gpupdate /force 
+    }else{
+        LogWrite "No new sids, skipping..."
+    }
+    del "$log_path\tempimport.inf" -force -ErrorAction SilentlyContinue
+    del "$log_path\secedit.sdb" -force -ErrorAction SilentlyContinue
+    del "$log_path\tempexport.inf" -force
 }
 
 #-----------------------------------------------------------[Execution]------------------------------------------------------------
