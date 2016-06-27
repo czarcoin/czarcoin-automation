@@ -49,7 +49,8 @@ To remove service use the following command
 To enable UPNP
 `./automate_storj_bridge.ps1 -enableupnp`
 
-To run as a service account (*recommended for automated deployment situations*)
+To run as a service account (*recommended for automated deployment situations* / Besure to deploy as a user and not as NT\Authority System otherwise it will fail)
+
 `./automate_storj_bridge.ps1 -runas -username username -password 'password'`
 
 ### Output Results
