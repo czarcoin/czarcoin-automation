@@ -553,21 +553,20 @@ function NodejsCheck([string]$version) {
         }
 
         LogWrite -color Green "Node.js Installed Version: $installed_version"
-
-        LogWrite "Checking for Node.js NPM Environment Path..."
-        $nodejs_path='' + $global:appdata + '\' + "npm\"
+    }
+    LogWrite "Checking for Node.js NPM Environment Path..."
+    $nodejs_path='' + $global:appdata + '\' + "npm\"
+    $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine")
+    $PathasArray=($Env:PATH).split(';')
+    if ($PathasArray -contains $nodejs_path -or $PathAsArray -contains $nodejs_path+'\') {
+    	LogWrite "Node.js NPM Environment Path $nodejs_path already within System Environment Path, skipping..."
+    } else {
+        $OldPath=(Get-ItemProperty -Path 'Registry::HKEY_LOCAL_MACHINE\System\CurrentControlSet\Control\Session Manager\Environment' -Name PATH -ErrorAction SilentlyContinue).Path
+        $NewPath=$OldPath+';'+$nodejs_path;
+        Set-ItemProperty -Path 'Registry::HKEY_LOCAL_MACHINE\System\CurrentControlSet\Control\Session Manager\Environment' -Name PATH -Value $newPath -ErrorAction SilentlyContinue
+        LogWrite "Node.js NPM Environment Path Added: $nodejs_path"
         $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine")
-        $PathasArray=($Env:PATH).split(';')
-        if ($PathasArray -contains $nodejs_path -or $PathAsArray -contains $nodejs_path+'\') {
-            LogWrite "Node.js NPM Environment Path $nodejs_path already within System Environment Path, skipping..."
-        } else {
-            $OldPath=(Get-ItemProperty -Path 'Registry::HKEY_LOCAL_MACHINE\System\CurrentControlSet\Control\Session Manager\Environment' -Name PATH -ErrorAction SilentlyContinue).Path
-            $NewPath=$OldPath+';'+$nodejs_path;
-            Set-ItemProperty -Path 'Registry::HKEY_LOCAL_MACHINE\System\CurrentControlSet\Control\Session Manager\Environment' -Name PATH -Value $newPath -ErrorAction SilentlyContinue
-            LogWrite "Node.js NPM Environment Path Added: $nodejs_path"
-            $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine")
-            $global:reboot_needed="true"
-        }
+        $global:reboot_needed="true"
     }
 }
 
