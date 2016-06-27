@@ -71,7 +71,7 @@ param(
 
 #---------------------------------------------------------[Initialisations]--------------------------------------------------------
 
-$global:script_version="1.5 Release" # Script version
+$global:script_version="1.6 Release" # Script version
 $global:reboot_needed=""
 $global:enableupnp=""
 $global:nosvc=""
@@ -125,6 +125,15 @@ $storj_bridge_log="$global:save_dir\$stor_bridge_svcname.log"
 #-----------------------------------------------------------[Functions]------------------------------------------------------------
 
 function handleParameters() {
+    if($silent) {
+        LogWrite "Logging to file $global:log_file"
+    }
+    else
+    {
+        $message="Logging to console"
+        LogWrite $message
+    }
+
     if ($runas) {
         $global:runas="true"
 
@@ -144,7 +153,7 @@ function handleParameters() {
         $global:credential = New-Object System.Management.Automation.PSCredential $global:username, $global:securePassword
 
         $save_dir=GetUserEnvironment "%TEMP%"
-        $global:save_dir=$save_dir.Substring(0,$save_dir.Length-1)
+        $global:save_dir=$save_dir.Substring(0,$save_dir.Length-1) + '\Temp\storj\bridge'
 
         $user_profile=GetUserEnvironment "%USERPROFILE%"
         $global:user_profile=$user_profile.Substring(0,$user_profile.Length-1)
@@ -157,15 +166,6 @@ function handleParameters() {
         $global:storj_bridge_bin='' + $global:appdata + '\' + "npm\storj-bridge.cmd"
 
         LogWrite "Using Service Account: $global:username"
-    }
-
-    if($silent) {
-        LogWrite "Logging to file $global:log_file"
-    }
-    else
-    {
-        $message="Logging to console"
-        LogWrite $message
     }
 
     if ($enableupnp) {
@@ -199,12 +199,12 @@ Function LogWrite([string]$logstring,[string]$color) {
     $logmessage="["+$LogTime+"] "+$logstring
     if($silent) {
         if($logstring) {
-            if(!(Test-Path -pathType container $global:log_file)) {
+            if(!(Test-Path -pathType container $global:log_path)) {
                 
-                New-Item $global:log_file -type directory -force
+                New-Item $global:log_path -type directory -force
 
-                if(!(Test-Path -pathType container $global:log_file)) {
-		            ErrorOut "Log Directory $global:log_file failed to create, try it manually..."
+                if(!(Test-Path -pathType container $global:log_path)) {
+		            ErrorOut "Log Directory $global:log_path failed to create, try it manually..."
 	            }
 	        }
             Add-content $global:log_file -value $logmessage
