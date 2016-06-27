@@ -129,11 +129,11 @@ $error_success_reboot_required=3010  #this is success, but requests for reboot
 function handleParameters() {
 
     if(!(Test-Path -pathType container $log_path)) {
-        New-Item $save_dir -type directory -force
+        New-Item $log_path -type directory -force
     }
 
     if(!(Test-Path -pathType container $log_path)) {
-		ErrorOut "Log Directory $save_dir failed to create, try it manually..."
+		ErrorOut "Log Directory $log_path failed to create, try it manually..."
 	}
 
     if(!(Test-Path -pathType container $save_dir)) {
