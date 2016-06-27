@@ -13,4 +13,4 @@ IF NOT EXIST "%install%" (
 
 REM Run automate_storj_bridge.ps1 Power Shell Script
 PowerShell.exe -NoProfile -Command "& {Unblock-File '%install%'}"
-PowerShell.exe -NoProfile -Command "& {Start-Process PowerShell.exe -ArgumentList '-NoProfile -NoLogo -NoExit -ExecutionPolicy Bypass & {&''%install%''}' -Verb RunAs}"
+PowerShell.exe -NoProfile -Command "& {Start-Process PowerShell.exe -ArgumentList '-NoProfile -NoLogo -NonInteractive -NoExit -ExecutionPolicy Bypass & {&''%install%''}' -Verb RunAs}"
