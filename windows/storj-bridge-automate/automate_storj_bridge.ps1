@@ -240,15 +240,7 @@ function ErrorOut([string]$message,[int]$code=$error_install_failure) {
     	LogWrite -color Red "Returning Error Code: $code"
     }
     
-    WaitUser
     exit $code;
-}
-
-function WaitUser() {
-    #pauses script to show results
-    if(!$silent) {
-        pause
-    }
 }
 
 function MongoDBCheck([string]$version) {
