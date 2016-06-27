@@ -23,6 +23,7 @@ This default configuration of the script automates the following functions:
 
 ### Usage Instructions
 
+```
 1.) Download Latest Release of storj-automation - https://github.com/Storj/storj-automation/archive/master.zip
 2.) Extract the ZIP, and navigate to `storj-automation-master\windows\storjshare-cli-automate`
 3.) Double-click `install.bat`
@@ -30,6 +31,7 @@ This default configuration of the script automates the following functions:
 5.) Reboot when completed
 6.) Double-click `install.bat`
 7.) Installation should now be completed. Follow https://github.com/Storj/storjshare-cli#usage to complete.
+```
 
 ### Advanced Functionality:
 
