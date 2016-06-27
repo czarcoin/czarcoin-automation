@@ -258,8 +258,8 @@ function MongoDBCheck([string]$version) {
 	    $filename = 'mongodb-win32' + $arch_ver + '-' + $version + '-signed.msi';
 	    $save_path = '' + $save_dir + '\' + $filename;
         $url='http://downloads.mongodb.org/win32/' + $filename;
-	    if(!(Test-Path -pathType container $save_path)) {
-		    ErrorOut "Save directory $save_path does not exist"
+	    if(!(Test-Path -pathType container $save_dir)) {
+		    ErrorOut "Save directory $save_dir does not exist"
 	    }
 
         LogWrite "Downloading MongoDB ($arch) $version..."
