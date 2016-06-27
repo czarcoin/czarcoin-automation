@@ -919,12 +919,12 @@ function UseNPM([string]$Arguments) {
 	}
 
     if($global:runas) {
-        $proc = Start-Process "npm" -Credential $global:credential -WorkingDirectory "$npm_path" -ArgumentList $Arguments -RedirectStandardOutput "$save_path" -RedirectStandardError "$save_path_err" -NoNewWindow
+        $proc = Start-Process "npm" -Credential $global:credential -WorkingDirectory "$npm_path" -ArgumentList $Arguments -RedirectStandardOutput "$save_path" -RedirectStandardError "$save_path_err"
     } else {
-        $proc = Start-Process "npm" -ArgumentList $Arguments -RedirectStandardOutput "$save_path" -RedirectStandardError "$save_path_err" -NoNewWindow
+        $proc = Start-Process "npm" -ArgumentList $Arguments -RedirectStandardOutput "$save_path" -RedirectStandardError "$save_path_err"
     }
 
-    Start-Sleep -s 3
+    Start-Sleep -s 5
     $processnpm=Get-Process | Where-Object { $_.MainWindowTitle -like '*npm' } | select -expand id
     Wait-Process -Id $processnpm -Timeout 600 -ErrorAction SilentlyContinue
 
