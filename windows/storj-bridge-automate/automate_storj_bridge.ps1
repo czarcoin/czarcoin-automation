@@ -23,11 +23,12 @@
   To remove service use the following command
   ./automate_storj_bridge.ps1 -removesvc
 
-  To run as a service account
-  ./automate_storj_bridge.ps1 -runas -username username -password password
+  To run as a service account in silent mode
+  ./automate_storj_bridge.ps1 -silent -runas -username username -password password
 
 .INPUTS
   -silent - [optional] this will write everything to a log file and prevent the script from running pause commands.
+    -noreboot - [optional] by default in silent mode the computer will auto-reboot if needed; this prevents that if called
   -enableupnp - [optional] Enables UPNP
   -nosvc - [optional] Prevents storj-bridge from being installed as a service
   -removesvc - [optional] Removes storjshare as a service (see the config section in the script to customize)
@@ -45,6 +46,9 @@
 param(
     [Parameter(Mandatory=$false)]
     [SWITCH]$silent,
+
+    [Parameter(Mandatory=$false)]
+    [SWITCH]$noreboot,
 
     [Parameter(Mandatory=$false)]
     [SWITCH]$enableupnp,
@@ -70,9 +74,10 @@ param(
 
 #---------------------------------------------------------[Initialisations]--------------------------------------------------------
 
-$global:script_version="2.0 Release" # Script version
+$global:script_version="2.1 Release" # Script version
 $global:reboot_needed=""
 $global:enableupnp=""
+$global:noreboot=""
 $global:nosvc=""
 $global:runas=""
 $global:username=""
@@ -86,6 +91,7 @@ $global:storj_bridge_bin='' + $global:npm_path + "storj-bridge.cmd" # Default: s
 
 #----------------------------------------------------------[Declarations]----------------------------------------------------------
 
+$environment="production" # change to development if non-production (changes the config file name)  Default: production
 $windows_env=$env:windir
 $save_dir='' + $windows_env + '\Temp\storj\installs' # (Default: %WINDIR%\Temp\storj\bridge)
 $log_path='' + $windows_env + '\Temp\storj\bridge' # (Default: %WINDIR%\Temp\storj\bridge)
@@ -124,6 +130,8 @@ $error_invalid_parameter=87 #this is failiure, invalid parameters referenced
 $error_install_failure=1603 #this is failure, A fatal error occured during installation (default error)
 $error_success_reboot_required=3010  #this is success, but requests for reboot
 
+$automatic_restart_timeout=30  #in seconds Default: 30
+
 #-----------------------------------------------------------[Functions]------------------------------------------------------------
 
 function handleParameters() {
@@ -146,6 +154,11 @@ function handleParameters() {
 
     if($silent) {
         LogWrite "Logging to file $log_file"
+
+        if($noreboot) {
+            LogWrite "Supressing auto-reboot (if applicable)"
+            $global:noreboot="true"
+        }
     }
     else
     {
@@ -810,6 +823,19 @@ function storj-bridgeCheck() {
 
         LogWrite -color Green "storj-bridge Installed Version: $version"
     }
+
+    LogWrite "Checking for storj-bridge Environment Variable..."
+    $env:NODE_ENV = [System.Environment]::GetEnvironmentVariable("NODE_ENV","Machine")
+    If ($env:NODE_ENV) {
+        LogWrite "storj-bridge Environment Variable (NODE_ENV - $env:NODE_ENV) is already set, skipping..."
+    }
+    else
+    {
+        [Environment]::SetEnvironmentVariable("NODE_ENV", $environment, "Machine")
+        $env:NODE_ENV = [System.Environment]::GetEnvironmentVariable("NODE_ENV","Machine")
+        LogWrite "storj-bridge Environment Variable Added: NODE_ENV - $env:NODE_ENV"
+        $global:reboot_needed="true"
+    }
 }
 
 function Get-IsProgramInstalled([string]$program) {
@@ -947,10 +973,17 @@ function UseNPM([string]$Arguments) {
 
 function CheckRebootNeeded() {
 	if($global:reboot_needed) {
-        LogWrite -color Red "=============================================="
-        LogWrite -color Red "~~~PLEASE REBOOT BEFORE PROCEEDING~~~"
-        LogWrite -color White "After the reboot, re-launch this script to complete the installation"
-        ErrorOut -code $error_success_reboot_required "~~~PLEASE REBOOT BEFORE PROCEEDING~~~"        
+        if((!$silent) -or (!$global:noreboot)) {
+            LogWrite -color Red "=============================================="
+            LogWrite -color Red "~~~PLEASE REBOOT BEFORE PROCEEDING~~~"
+            LogWrite -color White "After the reboot, re-launch this script to complete the installation"
+            ErrorOut -code $error_success_reboot_required "~~~PLEASE REBOOT BEFORE PROCEEDING~~~"
+        } else {
+            LogWrite -color Red "=============================================="
+            LogWrite -color Red "Initiating Auto-Reboot in $automatic_restart_timeout seconds"
+            Restart-Computer -Wait $automatic_restart_timeout
+            ErrorOut -code $error_success_reboot_required "~~~Automatically Rebooting in $automatic_restart_timeout seconds~~~"
+        } 
     } else {
         LogWrite -color Green "No Reboot Needed, continuing on with script"
     }
