@@ -78,10 +78,11 @@ $global:runas=""
 $global:username=""
 $global:password=""
 $global:return_code=$error_success #default success
-$global:user_profile=$env:userprofile # (Default: %USERPROFILE%) - runas overwrites this variable
-$global:appdata=$env:appdata # (Default: %APPDATA%) - runas overwrites this variable
-$global:mongodb_dbpath='' + $global:user_profile + '\' + '.storj-bridge\mongodb'; #Default %USERPROFILE%\.storj-bridge\ - runas overwrites this variable
-$global:storj_bridge_bin='' + $global:appdata + "npm\storj-bridge.cmd" # Default: storj-bridge location %APPDATA%\npm\storj-bridge.cmd" - runas overwrites this variable
+$global:user_profile=$env:userprofile + '\' # (Default: %USERPROFILE%) - runas overwrites this variable
+$global:appdata=$env:appdata + '\' # (Default: %APPDATA%\) - runas overwrites this variable
+$global:mongodb_dbpath='' + $global:user_profile + '.storj-bridge\mongodb'; #Default %USERPROFILE%\.storj-bridge\ - runas overwrites this variable
+$global:npm_path='' + $global:appdata + "npm\"
+$global:storj_bridge_bin='' + $global:npm_path + "storj-bridge.cmd" # Default: storj-bridge location %APPDATA%\npm\storj-bridge.cmd" - runas overwrites this variable
 
 #----------------------------------------------------------[Declarations]----------------------------------------------------------
 
@@ -99,7 +100,6 @@ $mongodb_log='' + $log_path + '\' + 'mongodb.log'; #Default: %TEMP%\mongodb.log 
 $gitforwindows_ver="2.8.3"  #   (Default: 2.8.3)
 
 $nodejs_ver="4.4.5" #make sure to reference LTS branch version (Default: 4.4.5)
-$npm_path='' + $env:programfiles + "\nodejs\node_modules\npm\"  # Default: %PROGRAMFILES%\nodejs\node_modules\npm
 
 $python_ver="2.7.11" #currently only use version 2 branch (Default: 2.7.11)
 $python_path = "C:\Python27\" #make sure ends with \ (Default: C:\Python27\)
@@ -172,14 +172,16 @@ function handleParameters() {
         $global:credential = New-Object System.Management.Automation.PSCredential $global:username, $global:securePassword
 
         $user_profile=GetUserEnvironment "%USERPROFILE%"
-        $global:user_profile=$user_profile.Substring(0,$user_profile.Length-1)
+        $global:user_profile=$user_profile.Substring(0,$user_profile.Length-1) + '\'
 
         $appdata=GetUserEnvironment "%APPDATA%"
-        $global:appdata=$appdata.Substring(0,$appdata.Length-1)
+        $global:appdata=$appdata.Substring(0,$appdata.Length-1) + '\'
 
-        $global:mongodb_dbpath='' + $global:user_profile + '\' + '.storj-bridge\mongodb'
+        $global:mongodb_dbpath='' + $global:user_profile + '.storj-bridge\mongodb'
 
-        $global:storj_bridge_bin='' + $global:appdata + '\' + "npm\storj-bridge.cmd"
+        $global:npm_path='' + $global:appdata + "npm\"
+        $global:storj_bridge_bin='' + $global:npm_path + "storj-bridge.cmd" # Default: storj-bridge location %APPDATA%\npm\storj-bridge.cmd" - runas overwrites this variable
+
 
         LogWrite "Using Service Account: $global:username"
 
@@ -555,16 +557,15 @@ function NodejsCheck([string]$version) {
         LogWrite -color Green "Node.js Installed Version: $installed_version"
     }
     LogWrite "Checking for Node.js NPM Environment Path..."
-    $nodejs_path='' + $global:appdata + '\' + "npm\"
     $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine")
     $PathasArray=($Env:PATH).split(';')
-    if ($PathasArray -contains $nodejs_path -or $PathAsArray -contains $nodejs_path+'\') {
-    	LogWrite "Node.js NPM Environment Path $nodejs_path already within System Environment Path, skipping..."
+    if ($PathasArray -contains $global:npm_path -or $PathAsArray -contains $global:npm_path+'\') {
+    	LogWrite "Node.js NPM Environment Path $global:npm_path already within System Environment Path, skipping..."
     } else {
         $OldPath=(Get-ItemProperty -Path 'Registry::HKEY_LOCAL_MACHINE\System\CurrentControlSet\Control\Session Manager\Environment' -Name PATH -ErrorAction SilentlyContinue).Path
-        $NewPath=$OldPath+';'+$nodejs_path;
+        $NewPath=$OldPath+';'+$global:npm_path;
         Set-ItemProperty -Path 'Registry::HKEY_LOCAL_MACHINE\System\CurrentControlSet\Control\Session Manager\Environment' -Name PATH -Value $newPath -ErrorAction SilentlyContinue
-        LogWrite "Node.js NPM Environment Path Added: $nodejs_path"
+        LogWrite "Node.js NPM Environment Path Added: $global:npm_path"
         $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine")
         $global:reboot_needed="true"
     }
@@ -917,8 +918,12 @@ function UseNPM([string]$Arguments) {
 	    ErrorOut "Log directory $log_path does not exist";
 	}
 
+	if(!(Test-Path -pathType container $global:npm_path)) {
+	    New-Item $global:npm_path -type directory -force
+	}
+
     if($global:runas) {
-        $proc = Start-Process "npm" -Credential $global:credential -WorkingDirectory "$npm_path" -ArgumentList $Arguments -RedirectStandardOutput "$save_path" -RedirectStandardError "$save_path_err"
+        $proc = Start-Process "npm" -Credential $global:credential -WorkingDirectory "$global:npm_path" -ArgumentList $Arguments -RedirectStandardOutput "$save_path" -RedirectStandardError "$save_path_err"
     } else {
         $proc = Start-Process "npm" -ArgumentList $Arguments -RedirectStandardOutput "$save_path" -RedirectStandardError "$save_path_err"
     }
