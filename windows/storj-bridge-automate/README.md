@@ -6,34 +6,39 @@ PowerShell script to automate the Storj Bridge installation and setup
 Prerequisites
 -------------
 
-* Windows 7 or later
-* Windows Server 2008 or later
-* PowerShell Version 2 or later
+* Windows 7 or later  
+* Windows Server 2008 or later  
+* PowerShell Version 2 or later  
 
 ### Background
 
 This default configuration of the script automates the following functions:
 
-```
---Installs all pre-requisites as listed: xxxx
---Sets required Windows environment variables
---Builds storj-bridge
---Disables UPNP on Windows
-```
+*Installs all pre-requisites as listed: <a href="https://github.com/Storj/bridge/">https://github.com/Storj/bridge/</a>  
+*Sets required Windows environment variables  
+*Builds storj-bridge  
+*Disables UPNP on Windows  
 
 ### Usage Instructions
 
-```
-1.) Download Latest Release of storj-automation - https://github.com/Storj/storj-automation/archive/master.zip
-2.) Extract the ZIP, and navigate to `storj-automation-master\windows\storjshare-bridge-automate`
-3.) Double-click `install.bat`
-4.) (if prompted) Click Yes on the User Account Control (UAC) screen
-5.) Reboot when completed
-6.) Double-click `install.bat`
-7.) Installation should now be completed. Follow xxx to complete.
-```
+1. Download Latest Release of storj-automation - <a href="https://github.com/Storj/storj-automation/archive/master.zip">https://github.com/Storj/storj-automation/archive/master.zip</a>
+2. Extract the ZIP, and navigate to `storj-automation-master\windows\storjshare-bridge-automate`
+3. Double-click `install.bat`
+4. (if prompted) Click Yes on the User Account Control (UAC) screen
+5. Reboot when completed
+6. Double-click `install.bat`
+7. Installation should now be completed.
+8. Navigate to `%USERPROFILE%\.storjshare\config\` and edit `devel` in a text editor
+9. Open services.msc and look for storj-bridge and start the service
+10. It should now be working and processing.
 
-### Advanced Functionality:
+### Logging
+
+Log files are stored in `%TEMP%\storj\bridge`
+
+`storj-bridge.log` will contain the storj bridge service details and you can confirm if it is working properly there.
+
+### Advanced Functionality
 
 Extra commands that can be run to adjust the usage of the script
 
