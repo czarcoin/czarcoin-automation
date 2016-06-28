@@ -91,6 +91,7 @@ $global:storj_bridge_bin='' + $global:npm_path + "storj-bridge.cmd" # Default: s
 
 #----------------------------------------------------------[Declarations]----------------------------------------------------------
 
+$environment="production" # change to development if non-production (changes the config file name)  Default: production
 $windows_env=$env:windir
 $save_dir='' + $windows_env + '\Temp\storj\installs' # (Default: %WINDIR%\Temp\storj\bridge)
 $log_path='' + $windows_env + '\Temp\storj\bridge' # (Default: %WINDIR%\Temp\storj\bridge)
@@ -821,6 +822,19 @@ function storj-bridgeCheck() {
         }
 
         LogWrite -color Green "storj-bridge Installed Version: $version"
+    }
+
+    LogWrite "Checking for storj-bridge Environment Variable..."
+    $env:NODE_ENV = [System.Environment]::GetEnvironmentVariable("NODE_ENV","Machine")
+    If ($env:NODE_ENV) {
+        LogWrite "storj-bridge Environment Variable (NODE_ENV - $env:NODE_ENV) is already set, skipping..."
+    }
+    else
+    {
+        [Environment]::SetEnvironmentVariable("NODE_ENV", $environment, "Machine")
+        $env:NODE_ENV = [System.Environment]::GetEnvironmentVariable("NODE_ENV","Machine")
+        LogWrite "storj-bridge Environment Variable Added: NODE_ENV - $env:NODE_ENV"
+        $global:reboot_needed="true"
     }
 }
 
