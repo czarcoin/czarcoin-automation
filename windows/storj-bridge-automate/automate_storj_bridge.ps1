@@ -12,22 +12,29 @@
 
   Examples:
   To deploy silently use the following command
-  ./automate_storj_cli.ps1 -silent
+  ./automate_storj_bridge.ps1 -silent
 
   To enable UPNP
-  ./automate_storj_cli.ps1 -enableupnp
+  ./automate_storj_bridge.ps1 -enableupnp
 
   To prevent the storj-bridge from being installed as a service
-  ./automate_storj_cli.ps1 -nosvc
+  ./automate_storj_bridge.ps1 -nosvc
 
   To remove service use the following command
-  ./automate_storj_cli.ps1 -removesvc
+  ./automate_storj_bridge.ps1 -removesvc
+
+  To run as a service account
+  ./automate_storj_bridge.ps1 -runas -username username -password password
 
 .INPUTS
   -silent - [optional] this will write everything to a log file and prevent the script from running pause commands.
   -enableupnp - [optional] Enables UPNP
   -nosvc - [optional] Prevents storj-bridge from being installed as a service
   -removesvc - [optional] Removes storjshare as a service (see the config section in the script to customize)
+  -runas - [optional] Runs the script as a service account
+    -username username [required] Username of the account
+    -password 'password' [required] Password of the account
+
 .OUTPUTS
   Return Codes (follows .msi standards) (https://msdn.microsoft.com/en-us/library/windows/desktop/aa376931(v=vs.85).aspx)
 
@@ -48,33 +55,47 @@ param(
     [Parameter(Mandatory=$false)]
     [SWITCH]$removesvc,
 
+    [Parameter(Mandatory=$false)]
+    [SWITCH]$runas,
+
+    [Parameter(Mandatory=$false,ValueFromPipelineByPropertyName=$true)]
+    [STRING]$username,
+
+    [Parameter(Mandatory=$false,ValueFromPipelineByPropertyName=$true)]
+    [STRING]$password,
+
     [parameter(Mandatory=$false,ValueFromRemainingArguments=$true)]
     [STRING]$other_args
  )
 
 #---------------------------------------------------------[Initialisations]--------------------------------------------------------
 
-$global:script_version="1.4 Release" # Script version
+$global:script_version="2.0 Release" # Script version
 $global:reboot_needed=""
 $global:enableupnp=""
 $global:nosvc=""
-$global:error_success=0  #this is success
-$global:error_invalid_parameter=87 #this is failiure, invalid parameters referenced
-$global:error_install_failure=1603 #this is failure, A fatal error occured during installation (default error)
-$global:error_success_reboot_required=3010  #this is success, but requests for reboot
-
-$global:return_code=$global:error_success #default success
+$global:runas=""
+$global:username=""
+$global:password=""
+$global:return_code=$error_success #default success
+$global:user_profile=$env:userprofile + '\' # (Default: %USERPROFILE%) - runas overwrites this variable
+$global:appdata=$env:appdata + '\' # (Default: %APPDATA%\) - runas overwrites this variable
+$global:mongodb_dbpath='' + $global:user_profile + '.storj-bridge\mongodb'; #Default %USERPROFILE%\.storj-bridge\ - runas overwrites this variable
+$global:npm_path='' + $global:appdata + "npm\"
+$global:storj_bridge_bin='' + $global:npm_path + "storj-bridge.cmd" # Default: storj-bridge location %APPDATA%\npm\storj-bridge.cmd" - runas overwrites this variable
 
 #----------------------------------------------------------[Declarations]----------------------------------------------------------
 
-$save_dir=$env:temp #path for downloaded files (Default: %TEMP%)
-$log_file='' + $save_dir + '\' + 'automate_storj_bridge.log'; #outputs everything to a file if -silent is used, instead of the console
+$windows_env=$env:windir
+$save_dir='' + $windows_env + '\Temp\storj\installs' # (Default: %WINDIR%\Temp\storj\bridge)
+$log_path='' + $windows_env + '\Temp\storj\bridge' # (Default: %WINDIR%\Temp\storj\bridge)
+$log_file=$log_path + '\' + 'automate_storj_bridge.log'; #outputs everything to a file if -silent is used, instead of the console
 
 $mongodb_ver="3.2.7" # (Default: 3.2.7)
-$mongodb_log='' + $save_dir + '\' + 'mongodb.log'; #Default: %TEMP%\mongodb.log
-$mongodb_dbpath='' + $env:userprofile + '\' + '.storj-bridge\mongodb'; #Default %USERPROFILE%\.storj-bridge\
 $mongodb_svc_name="MongoDB"
-$mongod_path='' + $env:programfiles + '\MongoDB\Server\3.2\bin\mongod.exe'; #Default %PROGRAMFILES%\MongoDB\Server\3.2\bin\mongod.exe
+$mongod_path='' + $env:programfiles + '\MongoDB\Server\3.2\bin\' #Default %PROGRAMFILES%\MongoDB\Server\3.2\bin\
+$mongod_exe='' + $mongod_path + 'mongod.exe'; #Default: \mongod.exe
+$mongodb_log='' + $log_path + '\' + 'mongodb.log'; #Default: %TEMP%\mongodb.log - runas overwrites this variable
 
 $gitforwindows_ver="2.8.3"  #   (Default: 2.8.3)
 
@@ -94,14 +115,35 @@ $LowRiskFileTypes = ".exe"
 $nssm_ver="2.24" # (Default: 2.24)
 $nssm_location="$env:windir\System32" # Default windows directory
 $nssm_bin='' + $nssm_location + '\' + "nssm.exe" # (Default: %WINDIR%\System32\nssm.exe)
-$storj_bridge_bin='' + $env:appdata + '\' + "npm\storj-bridge.cmd" # Default: storj-bridge location %APPDATA%\npm\storj-bridge.cmd"
 
 $stor_bridge_svcname="storj-bridge"
-$storj_bridge_log="$save_dir\$stor_bridge_svcname.log"
+$storj_bridge_log="$log_path\$stor_bridge_svcname.log"
+
+$error_success=0  #this is success
+$error_invalid_parameter=87 #this is failiure, invalid parameters referenced
+$error_install_failure=1603 #this is failure, A fatal error occured during installation (default error)
+$error_success_reboot_required=3010  #this is success, but requests for reboot
+
 #-----------------------------------------------------------[Functions]------------------------------------------------------------
 
 function handleParameters() {
-    #checks the silent parameter and if true, writes to log instead of console, also ignores pausing
+
+    if(!(Test-Path -pathType container $log_path)) {
+        New-Item $log_path -type directory -force
+    }
+
+    if(!(Test-Path -pathType container $log_path)) {
+		ErrorOut "Log Directory $log_path failed to create, try it manually..."
+	}
+
+    if(!(Test-Path -pathType container $save_dir)) {
+        New-Item $save_dir -type directory -force
+    }
+
+    if(!(Test-Path -pathType container $save_dir)) {
+		ErrorOut "Save Directory $save_dir failed to create, try it manually..."
+	}
+
     if($silent) {
         LogWrite "Logging to file $log_file"
     }
@@ -111,7 +153,42 @@ function handleParameters() {
         LogWrite $message
     }
 
-    #checks for enableupnp flag
+    if ($runas) {
+        $global:runas="true"
+
+        if(!($username)) {
+            ErrorOut -code $error_invalid_parameter "ERROR: Username not specified"
+        } else {
+            $global:username="$username"
+        }
+
+        if(!($password)) {
+            ErrorOut -code $error_invalid_parameter "ERROR: Password not specified"
+        } else {
+            $global:password="$password"
+        }
+
+        $global:securePassword = ConvertTo-SecureString $global:password -AsPlainText -Force
+        $global:credential = New-Object System.Management.Automation.PSCredential $global:username, $global:securePassword
+
+        $user_profile=GetUserEnvironment "%USERPROFILE%"
+        $global:user_profile=$user_profile.Substring(0,$user_profile.Length-1) + '\'
+
+        $appdata=GetUserEnvironment "%APPDATA%"
+        $global:appdata=$appdata.Substring(0,$appdata.Length-1) + '\'
+
+        $global:mongodb_dbpath='' + $global:user_profile + '.storj-bridge\mongodb'
+
+        $global:npm_path='' + $global:appdata + "npm\"
+        $global:storj_bridge_bin='' + $global:npm_path + "storj-bridge.cmd" # Default: storj-bridge location %APPDATA%\npm\storj-bridge.cmd" - runas overwrites this variable
+
+
+        LogWrite "Using Service Account: $global:username"
+
+        LogWrite "Granting $global:username Logon As A Service Right"
+        Grant-LogOnAsService $global:username
+    }
+
     if ($enableupnp) {
         $global:enableupnp="true"
     }
@@ -120,14 +197,13 @@ function handleParameters() {
         $global:nosvc="true"
     }
 
-    #checks for removesvc flag
     if ($removesvc) {
         $global:removesvc="true"
     }
 
     #checks for unknown/invalid parameters referenced
     if ($other_args) {
-        ErrorOut -code $global:error_invalid_parameter "ERROR: Unknown arguments: $args"
+        ErrorOut -code $error_invalid_parameter "ERROR: Unknown arguments: $args"
     }
 }
 
@@ -136,6 +212,14 @@ Function LogWrite([string]$logstring,[string]$color) {
     $logmessage="["+$LogTime+"] "+$logstring
     if($silent) {
         if($logstring) {
+            if(!(Test-Path -pathType container $log_path)) {
+
+                New-Item $log_path -type directory -force
+
+                if(!(Test-Path -pathType container $log_path)) {
+		            ErrorOut "Log Directory $log_path failed to create, try it manually..."
+	            }
+	        }
             Add-content $log_file -value $logmessage
         }
     } else {
@@ -151,22 +235,14 @@ Function LogWrite([string]$logstring,[string]$color) {
     }
 }
 
-function ErrorOut([string]$message,[int]$code=$global:error_install_failure) {
+function ErrorOut([string]$message,[int]$code=$error_install_failure) {
     LogWrite -color Red $message
     
     if($silent) {
     	LogWrite -color Red "Returning Error Code: $code"
     }
     
-    WaitUser
     exit $code;
-}
-
-function WaitUser() {
-    #pauses script to show results
-    if(!$silent) {
-        pause
-    }
 }
 
 function MongoDBCheck([string]$version) {
@@ -217,8 +293,7 @@ function MongoDBCheck([string]$version) {
             ErrorOut "Unable to match MongoDB version (Installed Version: $installed_version / Requested Version: $mongodb_ver)"
         }
 
-        if($result -eq 0)
-        {
+        if($result -eq 0) {
             LogWrite "MongoDB is already updated. Skipping..."
         } elseif($result -eq 1) {
             LogWrite "MongoDB is newer than the recommended version. Skipping..."
@@ -267,13 +342,13 @@ function MongoDBCheck([string]$version) {
     } else {
         LogWrite "Installing MongoDB Service"
 
-        if(!(Test-Path -pathType container $mongodb_dbpath)) {
-		    LogWrite "Database Directory $mongodb_dbpath does not exist, creating..."
+        if(!(Test-Path -pathType container $global:mongodb_dbpath)) {
+		    LogWrite "Database Directory $global:mongodb_dbpath does not exist, creating..."
 
-            New-Item $mongodb_dbpath -type directory -force
-
-            if(!(Test-Path -pathType container $mongodb_dbpath)) {
-		        ErrorOut "Database Directory $mongodb_dbpath failed to create, try it manually..."
+            New-Item $global:mongodb_dbpath -type directory -force
+            
+            if(!(Test-Path -pathType container $global:mongodb_dbpath)) {
+		        ErrorOut "Database Directory $global:mongodb_dbpath failed to create, try it manually..."
 	        }
 	    }
 
@@ -282,10 +357,10 @@ function MongoDBCheck([string]$version) {
 	    }
 
         $Arguments="--install "
-        $Arguments+="--dbpath $mongodb_dbpath "
+        $Arguments+="--dbpath $global:mongodb_dbpath "
         $Arguments+="--logpath $mongodb_log"
 
-        Start-Process "`"$mongod_path`"" -ArgumentList $Arguments -Wait
+        Start-Process "`"$mongod_exe`"" -ArgumentList $Arguments -NoNewWindow -Wait
 
         if(CheckService($mongodb_svc_name)) {
             LogWrite -color Green "MongoDB Service Installed Successfully"
@@ -293,6 +368,10 @@ function MongoDBCheck([string]$version) {
         } else {
             ErrorOut "MongoDB Service Failed to Install...try it manually..."
         }
+    }
+
+    if($global:runas) {
+        ChangeLogonService -svc_name $mongodb_svc_name -username $global:username -password $global:password
     }
 }
 
@@ -477,6 +556,19 @@ function NodejsCheck([string]$version) {
 
         LogWrite -color Green "Node.js Installed Version: $installed_version"
     }
+    LogWrite "Checking for Node.js NPM Environment Path..."
+    $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine")
+    $PathasArray=($Env:PATH).split(';')
+    if ($PathasArray -contains $global:npm_path -or $PathAsArray -contains $global:npm_path+'\') {
+    	LogWrite "Node.js NPM Environment Path $global:npm_path already within System Environment Path, skipping..."
+    } else {
+        $OldPath=(Get-ItemProperty -Path 'Registry::HKEY_LOCAL_MACHINE\System\CurrentControlSet\Control\Session Manager\Environment' -Name PATH -ErrorAction SilentlyContinue).Path
+        $NewPath=$OldPath+';'+$global:npm_path;
+        Set-ItemProperty -Path 'Registry::HKEY_LOCAL_MACHINE\System\CurrentControlSet\Control\Session Manager\Environment' -Name PATH -Value $newPath -ErrorAction SilentlyContinue
+        LogWrite "Node.js NPM Environment Path Added: $global:npm_path"
+        $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine")
+        $global:reboot_needed="true"
+    }
 }
 
 function PythonCheck([string]$version) {
@@ -657,7 +749,6 @@ function VisualStudioCheck([string]$version, [string]$dl_link) {
 
 function storj-bridgeCheck() {
     LogWrite "Checking if storj-bridge is installed..."
-
     $Arguments = "list -g"
     $output=(UseNPM $Arguments| Where-Object {$_ -like '*storj-bridge*'})
 
@@ -802,7 +893,7 @@ function RemoveLowRiskFiles() {
 function InstallEXE([string]$installer, [string]$Arguments) {
 	Unblock-File $installer
 	AddLowRiskFiles
-	Start-Process "`"$installer`"" -ArgumentList $Arguments -Wait
+    Start-Process "`"$installer`"" -ArgumentList $Arguments -Wait -NoNewWindow
 	RemoveLowRiskFiles
 }
 
@@ -814,21 +905,32 @@ function InstallMSI([string]$installer) {
 	$Arguments += "/passive"
 	$Arguments += "/norestart"
 
-	Start-Process "msiexec.exe" -ArgumentList $Arguments -Wait
+    Start-Process "msiexec.exe" -ArgumentList $Arguments -Wait -NoNewWindow
 }
 
 function UseNPM([string]$Arguments) {
 	$filename = 'npm_output.log';
-	$save_path = '' + $save_dir + '\' + $filename;
+	$save_path = '' + $log_path + '\' + $filename;
 
 	$filename_err = 'npm_output_err.log';
-	$save_path_err = '' + $save_dir + '\' + $filename_err;
-	if(!(Test-Path -pathType container $save_dir)) {
-	    ErrorOut "Save directory $save_dir does not exist";
+	$save_path_err = '' + $log_path + '\' + $filename_err;
+	if(!(Test-Path -pathType container $log_path)) {
+	    ErrorOut "Log directory $log_path does not exist";
 	}
-	
-    $proc = Start-Process "npm" -ArgumentList $Arguments -RedirectStandardOutput "$save_path" -RedirectStandardError "$save_path_err" -Passthru
-    $proc.WaitForExit()
+
+	if(!(Test-Path -pathType container $global:npm_path)) {
+	    New-Item $global:npm_path -type directory -force
+	}
+
+    if($global:runas) {
+        $proc = Start-Process "npm" -Credential $global:credential -WorkingDirectory "$global:npm_path" -ArgumentList $Arguments -RedirectStandardOutput "$save_path" -RedirectStandardError "$save_path_err"
+    } else {
+        $proc = Start-Process "npm" -ArgumentList $Arguments -RedirectStandardOutput "$save_path" -RedirectStandardError "$save_path_err"
+    }
+
+    Start-Sleep -s 5
+    $processnpm=Get-Process | Where-Object { $_.MainWindowTitle -like '*npm' } | select -expand id
+    Wait-Process -Id $processnpm -Timeout 600 -ErrorAction SilentlyContinue
 
     if(!(Test-Path $save_path) -or !(Test-Path $save_path_err)) {
         ErrorOut "npm command $Arguments failed to execute...try manually running it..."
@@ -839,7 +941,7 @@ function UseNPM([string]$Arguments) {
 
     Remove-Item "$save_path"
     Remove-Item "$save_path_err"
-    
+
     return $results
 }
 
@@ -848,7 +950,7 @@ function CheckRebootNeeded() {
         LogWrite -color Red "=============================================="
         LogWrite -color Red "~~~PLEASE REBOOT BEFORE PROCEEDING~~~"
         LogWrite -color White "After the reboot, re-launch this script to complete the installation"
-        ErrorOut -code $global:error_success_reboot_required "~~~PLEASE REBOOT BEFORE PROCEEDING~~~"        
+        ErrorOut -code $error_success_reboot_required "~~~PLEASE REBOOT BEFORE PROCEEDING~~~"        
     } else {
         LogWrite -color Green "No Reboot Needed, continuing on with script"
     }
@@ -874,6 +976,12 @@ function CompareVersions([String]$version1,[String]$version2) {
 
 function ModifyService([string]$svc_name, [string]$svc_status) {
     Set-Service $svc_name -startuptype $svc_status   
+}
+
+function ChangeLogonService([string]$svc_name, [string]$username, [string]$password) {
+    $LocalSrv = Get-WmiObject Win32_service -filter "name='$svc_name'"
+    $LocalSrv.Change($null,$null,$null,$null,$null,$false,$username,$password)
+    LogWrite "Changed Service $svc_name to Logon As $username"
 }
 
 function EnableUPNP() {
@@ -919,14 +1027,14 @@ function DisableUPNP() {
 
 function SetUPNP([string]$upnp_set) {
 	$filename = 'upnp_output.log';
-	$save_path = '' + $save_dir + '\' + $filename;
-	if(!(Test-Path -pathType container $save_dir)) {
-	    ErrorOut "Save directory $save_dir does not exist";
+	$save_path = '' + $log_path + '\' + $filename;
+	if(!(Test-Path -pathType container $log_path)) {
+	    ErrorOut "Log directory $log_path does not exist";
 	}
 	
     $Arguments="advfirewall firewall set rule group=`"Network Discovery`" new enable=$($upnp_set)"
-    $proc = Start-Process "netsh" -ArgumentList $Arguments -RedirectStandardOutput "$save_path" -Passthru
-    $proc.WaitForExit()
+    
+    $proc = Start-Process "netsh" -ArgumentList $Arguments -RedirectStandardOutput "$save_path" -Wait -NoNewWindow
 
     if(!(Test-Path $save_path)) {
         ErrorOut "npm command $Arguments failed to execute...try manually running it..."
@@ -977,13 +1085,12 @@ function RemoveService([string]$svc_name) {
 
 function UseNSSM([string]$Arguments) {
 	$filename = 'nssm_output.log';
-	$save_path = '' + $save_dir + '\' + $filename;
-	if(!(Test-Path -pathType container $save_dir)) {
-	    ErrorOut "Save directory $save_dir does not exist";
+	$save_path = '' + $log_path + '\' + $filename;
+	if(!(Test-Path -pathType container $log_path)) {
+	    ErrorOut "Save directory $log_path does not exist";
 	}
 	
-    $proc = Start-Process "nssm" -ArgumentList $Arguments -RedirectStandardOutput "$save_path" -Passthru
-    $proc.WaitForExit()
+    $proc = Start-Process "nssm" -ArgumentList $Arguments -RedirectStandardOutput "$save_path" -Wait -NoNewWindow
 
     if(!(Test-Path $save_path)) {
         ErrorOut "nssm command $Arguments failed to execute..."
@@ -1063,7 +1170,7 @@ function nssmCheck([string]$version) {
             }
 
             LogWrite "Installing service $stor_bridge_svcname"
-            $Arguments="install $stor_bridge_svcname $storj_bridge_bin >> $storj_bridge_log"
+            $Arguments="install $stor_bridge_svcname $global:storj_bridge_bin >> $storj_bridge_log"
             $results=UseNSSM $Arguments
             if(CheckService($stor_bridge_svcname)) {
                 LogWrite -color Green "Service $stor_bridge_svcname Installed Successfully"
@@ -1073,10 +1180,71 @@ function nssmCheck([string]$version) {
         } else {
             LogWrite "Service $stor_bridge_svcname already installed, skipping"
         }
+
+        if($global:runas) {
+            ChangeLogonService -svc_name $stor_bridge_svcname -username $global:username -password $global:password
+        }
     } else {
         LogWrite -color Green "Skipping Service Check/Installation - No Service Parameter passed"
     }
 }
+
+function GetUserEnvironment([string]$env_var) {
+	$filename = 'user_env.log';
+	$save_path = '' + $log_path + '\' + $filename;
+
+	if(!(Test-Path -pathType container $log_path)) {
+	    ErrorOut "Save directory $log_path does not exist";
+	}
+
+    $Arguments="/c ECHO $env_var"
+    $proc = Start-Process "cmd.exe" -Credential $global:credential -Workingdirectory "$env:windir\System32" -ArgumentList $Arguments -RedirectStandardOutput "$save_path" -Wait -NoNewWindow
+
+    if(!(Test-Path $save_path)) {
+        ErrorOut "cmd command $Arguments failed to execute...try manually running it..."
+    }
+    
+    $results=(Get-Content -Path "$save_path")
+
+    Remove-Item "$save_path"
+    
+    return $results
+}
+
+function Grant-LogOnAsService{
+param(
+    [string[]] $users
+    )
+    #Get list of currently used SIDs 
+    secedit /export /cfg "$log_path\tempexport.inf"
+    $curSIDs = Select-String "$log_path\tempexport.inf" -Pattern "SeServiceLogonRight" 
+    $Sids = $curSIDs.line 
+    $sidstring = ""
+    foreach($user in $users){
+        $objUser = New-Object System.Security.Principal.NTAccount($user)
+        $strSID = $objUser.Translate([System.Security.Principal.SecurityIdentifier])
+        if(!$Sids.Contains($strSID) -and !$sids.Contains($user)){
+            $sidstring += ",*$strSID"
+        }
+    }
+    if($sidstring){
+        $newSids = $sids + $sidstring
+        LogWrite "New Sids: $newSids"
+        $tempinf = Get-Content "$log_path\tempexport.inf"
+        $tempinf = $tempinf.Replace($Sids,$newSids)
+        Add-Content -Path "$log_path\tempimport.inf" -Value $tempinf
+        secedit /import /db "$log_path\secedit.sdb" /cfg "$log_path\tempimport.inf" 
+        secedit /configure /db "$log_path\secedit.sdb"
+ 
+        gpupdate /force 
+    }else{
+        LogWrite "No new sids, skipping..."
+    }
+    del "$log_path\tempimport.inf" -force -ErrorAction SilentlyContinue
+    del "$log_path\secedit.sdb" -force -ErrorAction SilentlyContinue
+    del "$log_path\tempexport.inf" -force
+}
+
 #-----------------------------------------------------------[Execution]------------------------------------------------------------
 
 handleParameters

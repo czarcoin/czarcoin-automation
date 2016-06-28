@@ -1,35 +1,50 @@
-Automates the installation of storjshare-cli for Windows only
-<br/>
-<br/>INSTRUCTIONS:
-<br/>1.) Download Latest Release of storj-automation (`https://github.com/Storj/storj-automation/archive/master.zip`)
-<br/>2.) Extract ZIP, and navigate to `storj-automation-master\windows\storjshare-cli-automate`
-<br/>3.) Double-click `install.bat`
-<br/>4.) (if prompted) Click Yes on the User Account Control (UAC) screen
-<br/>5.) Reboot when completed
-<br/>6.) Double-click `install.bat`
-<br/>7.) Installation should be completed. Follow `https://github.com/Storj/storjshare-cli#usage` to complete.
-<br/>
-<br/>COMPATIBILITY:
-<br/>   -PowerShell Version 2 or newer
-<br/>   -Administrator rights are required
-<br/>   -Client OS: Windows 7 or newer
-<br/>   -Server OS: Windows 2008 or newer
-<br/>
-<br/>ADVANCED FUNCTIONALITY:
-<br/>  Examples:
-<br/>  To deploy silently use the following command
-<br/>  ./automate_storj_cli.ps1 -silent
-<br/>
-<br/>  To install service use the following command
-<br/>  ./automate_storj_cli.ps1 -installsvc -svcname storjshare -datadir C:\storjshare -password 4321
-<br/>
-<br/>  To remove service use the following command
-<br/>  ./automate_storj_cli.ps1 -removesvc -svcname storjshare
-<br/>
-<br/>  To disable UPNP
-<br/>  ./automate_storj_cli.ps1 -noupnp
-<br/>
-<br/>TODO:
-<br/>   -Perform uninstall of pre-requirements and storj-cli
-<br/>   -Modify configuration of instance
-<br/>   -Setup storjshare-cli through commands
+Storj Share CLI - Windows Automation
+===============
+
+PowerShell script to automate the Storj Share CLI installation and setup
+
+Prerequisites
+-------------
+
+* Windows 7 or later
+* Windows Server 2008 or later
+* PowerShell Version 2 or later
+
+### Background
+
+This default configuration of the script automates the following functions:
+
+```
+--Installs all pre-requisites as listed: https://github.com/Storj/storjshare-cli#prerequisites
+--Sets required Windows environment variables
+--Builds storjshare-cli
+--Enables UPNP on Windows
+```
+
+### Usage Instructions
+
+```
+1.) Download Latest Release of storj-automation - https://github.com/Storj/storj-automation/archive/master.zip
+2.) Extract the ZIP, and navigate to `storj-automation-master\windows\storjshare-cli-automate`
+3.) Double-click `install.bat`
+4.) (if prompted) Click Yes on the User Account Control (UAC) screen
+5.) Reboot when completed
+6.) Double-click `install.bat`
+7.) Installation should now be completed. Follow https://github.com/Storj/storjshare-cli#usage to complete.
+```
+
+### Advanced Functionality:
+
+Extra commands that can be run to adjust the usage of the script
+
+To deploy silently use the following command
+`./automate_storj_cli.ps1 -silent`
+
+To install storjshare-cli as a service use the following command
+`./automate_storj_cli.ps1 -installsvc -svcname storjshare -datadir C:\storjshare -password 4321`
+
+To remove service use the following command
+`./automate_storj_cli.ps1 -removesvc -svcname storjshare`
+
+To disable UPNP
+`./automate_storj_cli.ps1 -noupnp`
