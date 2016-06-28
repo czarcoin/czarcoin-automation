@@ -40,6 +40,9 @@ Extra commands that can be run to adjust the usage of the script
 To deploy silently use the following command
 `./automate_storj_bridge.ps1 -silent`
 
+To deploy silently and suppress auto-reboot
+`./automate_storj_bridge.ps1 -silent -noreboot`
+
 To prevent from storj-bridge from being installed as a service
 `./automate_storj_bridge.ps1 -nosvc`
 
