@@ -8,7 +8,7 @@ Prerequisites
 
 * Windows 7 or later  
 * Windows Server 2008 or later  
-* PowerShell Version 2 or later  
+* PowerShell Version 3 or later  
 
 ### Background
 
