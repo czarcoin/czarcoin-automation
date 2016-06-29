@@ -29,8 +29,10 @@ This default configuration of the script automates the following functions:
 6. Double-click `install.bat`
 7. Installation should now be completed.
 8. Navigate to `%USERPROFILE%\.storjshare\config\` and edit `production` in a text editor
-9. Open services.msc and look for storj-bridge and start the service
-10. It should now be working and processing.
+9. Open services.msc and look for storj-bridge and start the service and ensure it starts without error.
+10. It should now be working and processing.  
+** You can verify it is working by going to reviewing the logs located at: `%TEMP%\storj\bridge\storj-bridge.log`  
+** Also you can verify it is working by going to http://127.0.0.1 from the bridge server itself to see if it loads the webpage  
 
 ### Logging
 
