@@ -28,7 +28,7 @@ This default configuration of the script automates the following functions:
 5. Reboot when completed
 6. Double-click `install.bat`
 7. Installation should now be completed.
-8. Navigate to `%USERPROFILE%\.storjshare\config\` and edit `devel` in a text editor
+8. Navigate to `%USERPROFILE%\.storjshare\config\` and edit `production` in a text editor
 9. Open services.msc and look for storj-bridge and start the service
 10. It should now be working and processing.
 
