@@ -40,6 +40,17 @@ Log files are stored in `%TEMP%\storj\bridge`
 
 `storj-bridge.log` will contain the storj bridge service details and you can confirm if it is working properly there.
 
+### Inputs
+  -silent - [optional] this will write everything to a log file and prevent the script from running pause commands.  
+    -noreboot - [optional] by default in silent mode the computer will auto-reboot if needed; this prevents that if called  
+  -enableupnp - [optional] Enables UPNP  
+  -nosvc - [optional] Prevents storj-bridge from being installed as a service  
+  -svcname [name] - [optional] Uses this name as the service to install or remove - storj-bridge is default  
+  -removesvc - [optional] Removes storjshare as a service (see the config section in the script to customize)  
+  -runas - [optional] Runs the script as a service account  
+    -username username [required] Username of the account  
+    -password 'password' [required] Password of the account  
+
 ### Advanced Functionality
 
 Extra commands that can be run to adjust the usage of the script
@@ -59,8 +70,7 @@ To remove service use the following command
 To enable UPNP
 `./automate_storj_bridge.ps1 -enableupnp`
 
-To run as a service account (*recommended for automated deployment situations* / Besure to deploy as a user and not as NT\Authority System otherwise it will fail)
-
+To run as a service account
 `./automate_storj_bridge.ps1 -runas -username username -password 'password'`
 
 ### Output Results
