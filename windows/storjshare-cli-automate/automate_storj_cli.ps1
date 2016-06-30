@@ -24,7 +24,7 @@
   ./automate_storj_cli.ps1 -noupnp
 
     To run as a service account in silent mode, no upnp, auto reboot, and install a service
-  ./automate_storj_cli.ps1 -silent -runas -username username -storjpassword password -noupnp -autoreboot -installsvc -datadir C:\storjshare -password 4321
+  ./automate_storj_cli.ps1 -silent -runas -username username -password password -noupnp -autoreboot -installsvc -datadir C:\storjshare -storjpassword 4321
 
 .INPUTS
   -silent - [optional] this will write everything to a log file and prevent the script from running pause commands.
@@ -43,7 +43,7 @@
     -datadir [directory] - [optional] Data Directory of Storjshare
     -storjpassword [password] - [required] Password for Storjshare Directory
     -publicaddr [ip or dns] - [optional] Public IP or DNS of storjshare (Default: 127.0.0.1)
-        *Note use {THIS} to use the FQDN of the current computer
+        *Note use [THIS] to use the FQDN of the current computer
     -svcport [port number] - [optional] TCP Port Number of storjshare Service (Default: 4000)
     -nat [true | false] - [optional] Turn on or Off Nat (UPNP) [Default: true]
     -uri [uri of known good seed] - [optional] URI of a known good seed (Default: [blank])
@@ -99,7 +99,7 @@ param(
     [SWITCH]$autosetup,
 
     [Parameter(Mandatory=$false,ValueFromPipelineByPropertyName=$true)]
-    [STRING]$publicipaddr,
+    [STRING]$publicaddr,
 
     [Parameter(Mandatory=$false,ValueFromPipelineByPropertyName=$true)]
     [STRING]$svcport,
@@ -137,7 +137,7 @@ param(
 
 #---------------------------------------------------------[Initialisations]--------------------------------------------------------
 
-$global:script_version="3.1 Release" # Script version
+$global:script_version="3.2 Release" # Script version
 $global:reboot_needed=""
 $global:noupnp=""
 $global:installsvc="true"
@@ -341,13 +341,29 @@ function handleParameters() {
         if(!($publicaddr)) {
             $global:publicaddr="$global:publicaddr"
         } else {
-            $global:publicaddr="$publicaddr"
+            if($publicaddr -eq "[THIS]") {
+                $global:publicaddr="$env:computername.$env:userdnsdomain"
+            } else {
+                $global:publicaddr="$publicaddr"
+            }
+        }
+
+        if(!($svcport)) {
+            $global:svcport="$global:svcport"
+        } else {
+            $global:svcport="$svcport"
         }
 
         if(!($nat)) {
             $global:nat="$global:nat"
         } else {
-            $global:svcport="$nat"
+            $global:nat="$nat"
+        }
+
+        if(!($amt)) {
+            $global:amt="$global:amt"
+        } else {
+            $global:amt="$amt"
         }
 
         if(!($uri)) {
@@ -395,7 +411,7 @@ function handleParameters() {
 
     #checks for unknown/invalid parameters referenced
     if ($other_args) {
-        ErrorOut -code $global:error_invalid_parameter "ERROR: Unknown arguments: $args"
+        ErrorOut -code $global:error_invalid_parameter "ERROR: Unknown arguments: $other_args"
     }
 }
 
