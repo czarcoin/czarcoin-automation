@@ -1,4 +1,4 @@
-#Requires -Version 2
+#Requires -Version 3
 #Requires -RunAsAdministrator
 <#
 .SYNOPSIS
@@ -23,13 +23,15 @@
   To remove service use the following command
   ./automate_storj_bridge.ps1 -removesvc
 
-  To run as a service account
-  ./automate_storj_bridge.ps1 -runas -username username -password password
+  To run as a service account in silent mode
+  ./automate_storj_bridge.ps1 -silent -runas -username username -password password
 
 .INPUTS
   -silent - [optional] this will write everything to a log file and prevent the script from running pause commands.
+    -noreboot - [optional] by default in silent mode the computer will auto-reboot if needed; this prevents that if called
   -enableupnp - [optional] Enables UPNP
   -nosvc - [optional] Prevents storj-bridge from being installed as a service
+  -svcname [name] - [optional] Uses this name as the service to install or remove - storj-bridge is default
   -removesvc - [optional] Removes storjshare as a service (see the config section in the script to customize)
   -runas - [optional] Runs the script as a service account
     -username username [required] Username of the account
@@ -47,6 +49,9 @@ param(
     [SWITCH]$silent,
 
     [Parameter(Mandatory=$false)]
+    [SWITCH]$noreboot,
+
+    [Parameter(Mandatory=$false)]
     [SWITCH]$enableupnp,
 
     [Parameter(Mandatory=$false)]
@@ -54,6 +59,9 @@ param(
 
     [Parameter(Mandatory=$false)]
     [SWITCH]$removesvc,
+
+    [Parameter(Mandatory=$false,ValueFromPipelineByPropertyName=$true)]
+    [STRING]$svcname,
 
     [Parameter(Mandatory=$false)]
     [SWITCH]$runas,
@@ -70,10 +78,12 @@ param(
 
 #---------------------------------------------------------[Initialisations]--------------------------------------------------------
 
-$global:script_version="2.0 Release" # Script version
+$global:script_version="2.3 Release" # Script version
 $global:reboot_needed=""
 $global:enableupnp=""
+$global:noreboot=""
 $global:nosvc=""
+$global:svcname=""
 $global:runas=""
 $global:username=""
 $global:password=""
@@ -86,6 +96,7 @@ $global:storj_bridge_bin='' + $global:npm_path + "storj-bridge.cmd" # Default: s
 
 #----------------------------------------------------------[Declarations]----------------------------------------------------------
 
+$environment="production" # change to development if non-production (changes the config file name)  Default: production
 $windows_env=$env:windir
 $save_dir='' + $windows_env + '\Temp\storj\installs' # (Default: %WINDIR%\Temp\storj\bridge)
 $log_path='' + $windows_env + '\Temp\storj\bridge' # (Default: %WINDIR%\Temp\storj\bridge)
@@ -96,6 +107,11 @@ $mongodb_svc_name="MongoDB"
 $mongod_path='' + $env:programfiles + '\MongoDB\Server\3.2\bin\' #Default %PROGRAMFILES%\MongoDB\Server\3.2\bin\
 $mongod_exe='' + $mongod_path + 'mongod.exe'; #Default: \mongod.exe
 $mongodb_log='' + $log_path + '\' + 'mongodb.log'; #Default: %TEMP%\mongodb.log - runas overwrites this variable
+
+$erlang_ver="19.0" # Default: 19.0
+$erlang_compare_ver="19 (8.0)" # Default: 19 (8.0)
+
+$rabbitmq_ver="3.6.2" # Default: 3.6.2
 
 $gitforwindows_ver="2.8.3"  #   (Default: 2.8.3)
 
@@ -113,7 +129,7 @@ $Lowriskregfile = "LowRiskFileTypes"
 $LowRiskFileTypes = ".exe"
 
 $nssm_ver="2.24" # (Default: 2.24)
-$nssm_location="$env:windir\System32" # Default windows directory
+$nssm_location="$windows_env\System32" # Default windows directory
 $nssm_bin='' + $nssm_location + '\' + "nssm.exe" # (Default: %WINDIR%\System32\nssm.exe)
 
 $stor_bridge_svcname="storj-bridge"
@@ -124,12 +140,14 @@ $error_invalid_parameter=87 #this is failiure, invalid parameters referenced
 $error_install_failure=1603 #this is failure, A fatal error occured during installation (default error)
 $error_success_reboot_required=3010  #this is success, but requests for reboot
 
+$automatic_restart_timeout=30  #in seconds Default: 30
+
 #-----------------------------------------------------------[Functions]------------------------------------------------------------
 
 function handleParameters() {
 
     if(!(Test-Path -pathType container $log_path)) {
-        New-Item $log_path -type directory -force
+        New-Item $log_path -type directory -force | Out-Null
     }
 
     if(!(Test-Path -pathType container $log_path)) {
@@ -137,7 +155,7 @@ function handleParameters() {
 	}
 
     if(!(Test-Path -pathType container $save_dir)) {
-        New-Item $save_dir -type directory -force
+        New-Item $save_dir -type directory -force | Out-Null
     }
 
     if(!(Test-Path -pathType container $save_dir)) {
@@ -146,6 +164,11 @@ function handleParameters() {
 
     if($silent) {
         LogWrite "Logging to file $log_file"
+
+        if($noreboot) {
+            LogWrite "Supressing auto-reboot (if applicable)"
+            $global:noreboot="true"
+        }
     }
     else
     {
@@ -168,8 +191,8 @@ function handleParameters() {
             $global:password="$password"
         }
 
-        $global:securePassword = ConvertTo-SecureString $global:password -AsPlainText -Force
-        $global:credential = New-Object System.Management.Automation.PSCredential $global:username, $global:securePassword
+        $securePassword = ConvertTo-SecureString $global:password -AsPlainText -Force
+        $global:credential = New-Object System.Management.Automation.PSCredential $global:username, $securePassword
 
         $user_profile=GetUserEnvironment "%USERPROFILE%"
         $global:user_profile=$user_profile.Substring(0,$user_profile.Length-1) + '\'
@@ -182,9 +205,7 @@ function handleParameters() {
         $global:npm_path='' + $global:appdata + "npm\"
         $global:storj_bridge_bin='' + $global:npm_path + "storj-bridge.cmd" # Default: storj-bridge location %APPDATA%\npm\storj-bridge.cmd" - runas overwrites this variable
 
-
         LogWrite "Using Service Account: $global:username"
-
         LogWrite "Granting $global:username Logon As A Service Right"
         Grant-LogOnAsService $global:username
     }
@@ -195,6 +216,12 @@ function handleParameters() {
 
     if($nosvc) {
         $global:nosvc="true"
+    }
+
+    if(!($svcname)) {
+        $global:svcname="$stor_bridge_svcname"
+    } else {
+        $global:svcname="$svcname"
     }
 
     if ($removesvc) {
@@ -214,7 +241,7 @@ Function LogWrite([string]$logstring,[string]$color) {
         if($logstring) {
             if(!(Test-Path -pathType container $log_path)) {
 
-                New-Item $log_path -type directory -force
+                New-Item $log_path -type directory -force | Out-Null
 
                 if(!(Test-Path -pathType container $log_path)) {
 		            ErrorOut "Log Directory $log_path failed to create, try it manually..."
@@ -345,7 +372,7 @@ function MongoDBCheck([string]$version) {
         if(!(Test-Path -pathType container $global:mongodb_dbpath)) {
 		    LogWrite "Database Directory $global:mongodb_dbpath does not exist, creating..."
 
-            New-Item $global:mongodb_dbpath -type directory -force
+            New-Item $global:mongodb_dbpath -type directory -force | Out-Null
             
             if(!(Test-Path -pathType container $global:mongodb_dbpath)) {
 		        ErrorOut "Database Directory $global:mongodb_dbpath failed to create, try it manually..."
@@ -372,6 +399,179 @@ function MongoDBCheck([string]$version) {
 
     if($global:runas) {
         ChangeLogonService -svc_name $mongodb_svc_name -username $global:username -password $global:password
+    }
+}
+
+function ErlangCheck([string]$version) {
+    LogWrite "Checking if Erlang is installed..."
+    If(!(Get-IsProgramInstalled "Erlang")) {
+        LogWrite "Erlang $version is not installed."
+        if ([System.IntPtr]::Size -eq 4) {
+            $arch="32-bit"
+            $arch_ver='32_'
+        } else {
+            $arch="64-bit"
+            $arch_ver='64_'
+        }
+
+	    $filename = 'otp_win' + $arch_ver + $version + '.exe';
+	    $save_path = '' + $save_dir + '\' + $filename;
+        $url='http://erlang.org/download/' + $filename;
+	    if(!(Test-Path -pathType container $save_dir)) {
+		    ErrorOut "Save directory $save_dir does not exist"
+	    }
+
+        LogWrite "Downloading Erlang ($arch) $version..."
+        DownloadFile $url $save_path
+        LogWrite "Erlang ($arch) $erlang_ver downloaded"
+
+	    LogWrite "Installing Erlang ($arch) $version..."
+        $Arguments = "/S"
+	    InstallEXE $save_path $Arguments
+        
+        If(!(Get-IsProgramInstalled "Erlang")) {
+           ErrorOut "Erlang did not complete installation successfully...try manually installing it..."
+        }
+
+        $global:reboot_needed="true"
+        LogWrite -color Green "Erlang Installed Successfully"
+    }
+    else
+    {
+        LogWrite "Erlang is already installed. Skipping install..."
+
+        <#  DOES NOT SUPPORT UPDATING (JUST YET)
+        LogWrite "Checking version..."
+
+        $installed_version = Get-ProgramVersion( "Erlang" )
+        if(!$installed_version) {
+            ErrorOut "Erlang Version is Unknown - Error"
+        }
+
+        $result = CompareVersions $installed_version $erlang_ver
+        if($result -eq "-2") {
+            ErrorOut "Unable to match Erlang version (Installed Version: $installed_version / Requested Version: $erlang_ver)"
+        }
+
+        if($result -eq 0)
+        {
+            LogWrite "Erlang is already updated. Skipping..."
+        } elseif($result -eq 1) {
+            LogWrite "Erlang is newer than the recommended version. Skipping..."
+        } else {
+            LogWrite "Erlang is out of date."
+            
+            if ([System.IntPtr]::Size -eq 4) {
+                $arch="32-bit"
+                $arch_ver='32_'
+            } else {
+                $arch="64-bit"
+                $arch_ver='64_'
+            }
+
+	        $filename = 'otp_win' + $arch_ver + $erlang_ver + '.exe';
+	        $save_path = '' + $save_dir + '\' + $filename;
+            $url='http://erlang.org/download/' + $filename;
+	        if(!(Test-Path -pathType container $save_dir)) {
+		        ErrorOut "Save directory $save_dir does not exist"
+	        }
+
+            LogWrite "Downloading Erlang ($arch) $erlang_ver..."
+            DownloadFile $url $save_path
+            LogWrite "Erlang ($arch) $erlang_ver downloaded"
+
+	        LogWrite "Installing Erlang ($arch) $erlang_ver..."
+            $Arguments = "/S"
+	        InstallEXE $save_path $Arguments
+        
+            If(!(Get-IsProgramInstalled "Erlang")) {
+               ErrorOut "Erlang did not complete installation successfully...try manually installing it..."
+            }
+
+            $global:reboot_needed="true"
+            LogWrite -color Green "Erlang Updated Successfully"
+            $installed_version = $erlang_ver
+            
+        }
+        #>
+    }
+}
+
+function RabbitMQCheck([string]$version) {
+    LogWrite "Checking if RabbitMQ is installed..."
+    If(!(Get-IsProgramInstalled "RabbitMQ")) {
+        LogWrite "RabbitMQ $version is not installed."
+
+	    $filename = 'rabbitmq-server-' + $version + '.exe';
+	    $save_path = '' + $save_dir + '\' + $filename;
+        $url='https://www.rabbitmq.com/releases/rabbitmq-server/v' + $version + '/' + $filename;
+	    if(!(Test-Path -pathType container $save_dir)) {
+		    ErrorOut "Save directory $save_dir does not exist"
+	    }
+
+        LogWrite "Downloading RabbitMQ $version..."
+        DownloadFile $url $save_path
+        LogWrite "RabbitMQ downloaded"
+
+	    LogWrite "InstallingRabbitMQ $version..."
+        $Arguments = "/S"
+	    InstallEXE $save_path $Arguments
+        
+        If(!(Get-IsProgramInstalled "RabbitMQ")) {
+           ErrorOut "RabbitMQ did not complete installation successfully...try manually installing it..."
+        }
+
+        $global:reboot_needed="true"
+        LogWrite -color Green "RabbitMQ Installed Successfully"
+    }
+    else
+    {
+        LogWrite "RabbitMQ is already installed."
+        LogWrite "Checking version..."
+
+        $installed_version = Get-ProgramVersion( "RabbitMQ" )
+        if(!$installed_version) {
+            ErrorOut "RabbitMQ Version is Unknown - Error"
+        }
+
+        $result = CompareVersions $installed_version $rabbitmq_ver
+        if($result -eq "-2") {
+            ErrorOut "Unable to match RabbitMQ version (Installed Version: $installed_version / Requested Version: $rabbitmq_ver)"
+        }
+
+        if($result -eq 0)
+        {
+            LogWrite "RabbitMQ is already updated. Skipping..."
+        } elseif($result -eq 1) {
+            LogWrite "RabbitMQ is newer than the recommended version. Skipping..."
+        } else {
+            LogWrite "RabbitMQ is out of date."
+            
+            LogWrite -Color Cyan "Rabbit $installed_version will be updated to $rabbitmq_ver..."
+	        
+            $filename = 'rabbitmq-server-' + $rabbitmq_ver + '.exe';
+	        $save_path = '' + $save_dir + '\' + $filename;
+            $url='https://www.rabbitmq.com/releases/rabbitmq-server/v' + $rabbitmq_ver + '/' + $filename;
+	        if(!(Test-Path -pathType container $save_dir)) {
+		        ErrorOut "Save directory $save_dir does not exist"
+	        }
+
+            LogWrite "Downloading RabbitMQ $rabbitmq_ver..."
+            DownloadFile $url $save_path
+            LogWrite "RabbitMQ downloaded"
+
+	        LogWrite "InstallingRabbitMQ $rabbitmq_ver..."
+            $Arguments = "/S"
+	        InstallEXE $save_path $Arguments
+        
+            If(!(Get-IsProgramInstalled "RabbitMQ")) {
+               ErrorOut "RabbitMQ did not complete installation successfully...try manually installing it..."
+            }
+
+            $global:reboot_needed="true"
+            LogWrite -color Green "RabbitMQ Updated Successfully"
+            $installed_version = $rabbitmq_ver            
+        }
     }
 }
 
@@ -810,6 +1010,19 @@ function storj-bridgeCheck() {
 
         LogWrite -color Green "storj-bridge Installed Version: $version"
     }
+
+    LogWrite "Checking for storj-bridge Environment Variable..."
+    $env:NODE_ENV = [System.Environment]::GetEnvironmentVariable("NODE_ENV","Machine")
+    If ($env:NODE_ENV) {
+        LogWrite "storj-bridge Environment Variable (NODE_ENV - $env:NODE_ENV) is already set, skipping..."
+    }
+    else
+    {
+        [Environment]::SetEnvironmentVariable("NODE_ENV", $environment, "Machine")
+        $env:NODE_ENV = [System.Environment]::GetEnvironmentVariable("NODE_ENV","Machine")
+        LogWrite "storj-bridge Environment Variable Added: NODE_ENV - $env:NODE_ENV"
+        $global:reboot_needed="true"
+    }
 }
 
 function Get-IsProgramInstalled([string]$program) {
@@ -882,8 +1095,8 @@ function FollowDownloadFile([string]$url, [string]$targetFile) {
 }
 
 function AddLowRiskFiles() {
-	New-Item -Path $Lowriskregpath -Erroraction SilentlyContinue |out-null
-	New-ItemProperty $Lowriskregpath -Name $Lowriskregfile -Value $LowRiskFileTypes -PropertyType String -ErrorAction SilentlyContinue |out-null
+	New-Item -Path $Lowriskregpath -Erroraction SilentlyContinue | Out-Null
+	New-ItemProperty $Lowriskregpath -Name $Lowriskregfile -Value $LowRiskFileTypes -PropertyType String -ErrorAction SilentlyContinue | Out-Null
 }
 
 function RemoveLowRiskFiles() {
@@ -919,7 +1132,7 @@ function UseNPM([string]$Arguments) {
 	}
 
 	if(!(Test-Path -pathType container $global:npm_path)) {
-	    New-Item $global:npm_path -type directory -force
+	    New-Item $global:npm_path -type directory -force | Out-Null
 	}
 
     if($global:runas) {
@@ -929,8 +1142,16 @@ function UseNPM([string]$Arguments) {
     }
 
     Start-Sleep -s 5
-    $processnpm=Get-Process | Where-Object { $_.MainWindowTitle -like '*npm' } | select -expand id
-    Wait-Process -Id $processnpm -Timeout 600 -ErrorAction SilentlyContinue
+    $processnpm=Get-Process | Where-Object { $_.MainWindowTitle -like '*npm*' } | select -expand id
+    
+    try
+    {
+        Wait-Process -Id $processnpm -Timeout 600 -ErrorAction SilentlyContinue
+    }
+    catch
+    {
+        LogWrite ""
+    }
 
     if(!(Test-Path $save_path) -or !(Test-Path $save_path_err)) {
         ErrorOut "npm command $Arguments failed to execute...try manually running it..."
@@ -947,10 +1168,17 @@ function UseNPM([string]$Arguments) {
 
 function CheckRebootNeeded() {
 	if($global:reboot_needed) {
-        LogWrite -color Red "=============================================="
-        LogWrite -color Red "~~~PLEASE REBOOT BEFORE PROCEEDING~~~"
-        LogWrite -color White "After the reboot, re-launch this script to complete the installation"
-        ErrorOut -code $error_success_reboot_required "~~~PLEASE REBOOT BEFORE PROCEEDING~~~"        
+        if((!$silent) -or (!$global:noreboot)) {
+            LogWrite -color Red "=============================================="
+            LogWrite -color Red "~~~PLEASE REBOOT BEFORE PROCEEDING~~~"
+            LogWrite -color White "After the reboot, re-launch this script to complete the installation"
+            ErrorOut -code $error_success_reboot_required "~~~PLEASE REBOOT BEFORE PROCEEDING~~~"
+        } else {
+            LogWrite -color Red "=============================================="
+            LogWrite -color Red "Initiating Auto-Reboot in $automatic_restart_timeout seconds"
+            Restart-Computer -Wait $automatic_restart_timeout
+            ErrorOut -code $error_success_reboot_required "~~~Automatically Rebooting in $automatic_restart_timeout seconds~~~"
+        } 
     } else {
         LogWrite -color Green "No Reboot Needed, continuing on with script"
     }
@@ -1028,19 +1256,20 @@ function DisableUPNP() {
 function SetUPNP([string]$upnp_set) {
 	$filename = 'upnp_output.log';
 	$save_path = '' + $log_path + '\' + $filename;
+
 	if(!(Test-Path -pathType container $log_path)) {
 	    ErrorOut "Log directory $log_path does not exist";
 	}
 	
     $Arguments="advfirewall firewall set rule group=`"Network Discovery`" new enable=$($upnp_set)"
-    
     $proc = Start-Process "netsh" -ArgumentList $Arguments -RedirectStandardOutput "$save_path" -Wait -NoNewWindow
 
     if(!(Test-Path $save_path)) {
-        ErrorOut "npm command $Arguments failed to execute...try manually running it..."
+        ErrorOut "netsh command $Arguments failed to execute...try manually running it..."
     }
     
     $results=(Get-Content -Path "$save_path") | Where-Object {$_ -like '*Ok*'}
+
     Remove-Item "$save_path"
     
     if($results.Length -eq 0) {
@@ -1076,10 +1305,10 @@ function RemoveService([string]$svc_name) {
         if(CheckService $svc_name -eq 1) {
             ErrorOut "Failed to remove $svc_name"
         } else {
-            write-host "Service $svc_name successfully removed"
+            LogWrite "Service $svc_name successfully removed"
         }
     } else {
-        write-host "Service $svc_name is not installed, skipping removal..."
+        LogWrite "Service $svc_name is not installed, skipping removal..."
     }
 }
 
@@ -1134,11 +1363,11 @@ function Installnssm([string]$save_location,[string]$arch) {
 function nssmCheck([string]$version) {
 
     if($global:removesvc) {
-        RemoveService $stor_bridge_svcname
+        RemoveService $global:svcname
     }
 
     if(!($global:nosvc)) {
-        if(!(CheckService $stor_bridge_svcname)) {
+        if(!(CheckService $global:svcname)) {
             LogWrite "Checking if NSSM is installed..."
 	        if(!(Test-Path $nssm_bin)) {
                 LogWrite "NSSM is not installed."
@@ -1169,20 +1398,20 @@ function nssmCheck([string]$version) {
                  LogWrite -color Green "NSSM already installed, skipping"
             }
 
-            LogWrite "Installing service $stor_bridge_svcname"
-            $Arguments="install $stor_bridge_svcname $global:storj_bridge_bin >> $storj_bridge_log"
+            LogWrite "Installing service $global:svcname"
+            $Arguments="install $global:svcname $global:storj_bridge_bin >> $storj_bridge_log"
             $results=UseNSSM $Arguments
-            if(CheckService($stor_bridge_svcname)) {
-                LogWrite -color Green "Service $stor_bridge_svcname Installed Successfully"
+            if(CheckService($global:svcname)) {
+                LogWrite -color Green "Service $global:svcname Installed Successfully"
             } else {
-                ErrorOut "Failed to install service $stor_bridge_svcname"
+                ErrorOut "Failed to install service $global:svcname"
             }
         } else {
-            LogWrite "Service $stor_bridge_svcname already installed, skipping"
+            LogWrite "Service $global:svcname already installed, skipping"
         }
 
         if($global:runas) {
-            ChangeLogonService -svc_name $stor_bridge_svcname -username $global:username -password $global:password
+            ChangeLogonService -svc_name $global:svcname -username $global:username -password $global:password
         }
     } else {
         LogWrite -color Green "Skipping Service Check/Installation - No Service Parameter passed"
@@ -1266,9 +1495,17 @@ LogWrite ""
 LogWrite -color Cyan "Checking for Pre-Requirements..."
 LogWrite ""
 LogWrite ""
-LogWrite -color Yellow "Reviewing mongoD..."
+LogWrite -color Yellow "Reviewing mongoDB..."
 MongoDBCheck $mongodb_ver
-LogWrite -color Green "Git for Windows Review Completed"
+LogWrite -color Green "mongoDB Review Completed"
+LogWrite ""
+LogWrite -color Yellow "Reviewing Erlang..."
+ErlangCheck $erlang_ver
+LogWrite -color Green "Erlang Review Completed"
+LogWrite ""
+LogWrite -color Yellow "Reviewing RabbitMQ..."
+RabbitMQCheck $rabbitmq_ver
+LogWrite -color Green "RabbitMQ Review Completed"
 LogWrite ""
 LogWrite -color Yellow "Reviewing Git for Windows..."
 GitForWindowsCheck $gitforwindows_ver
