@@ -491,8 +491,9 @@ function ErlangCheck([string]$version) {
             $global:reboot_needed="true"
             LogWrite -color Green "Erlang Updated Successfully"
             $installed_version = $erlang_ver
-            #>
+            
         }
+        #>
     }
 }
 
