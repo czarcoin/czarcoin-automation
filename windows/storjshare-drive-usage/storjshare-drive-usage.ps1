@@ -20,11 +20,13 @@
 #---------------------------------------------------------[Initialisations]--------------------------------------------------------
 
 $global:total=0
-$global:script_version="1.2 Release"
+$global:script_version="1.3"
 
 #----------------------------------------------------------[Declarations]----------------------------------------------------------
 
-$storjshareFolders = "E:\;"
+$storjshareFolders = "E:\.storjshare\;"
+$log_path=$env:windir + '\Temp\storj\driveusage'
+$log_file=$log_path + '\drive_usage.log'
 
 #-----------------------------------------------------------[Functions]------------------------------------------------------------
 
@@ -61,15 +63,17 @@ function GetFolderSize([string]$folder) {
     $colItems = (Get-ChildItem $folder -recurse | Where-Object {$_.PSIsContainer -eq $True} | Sort-Object)
     foreach ($i in $colItems) {
         $subFolderItems = (Get-ChildItem $i.FullName | Measure-Object -ErrorAction SilentlyContinue -property length -sum)
-        $sum=$subFolderItems.sum / 1KB
+        $sum=[math]::Round($subFolderItems.sum / 1KB,0)
         $global:total+=$sum
 
         $results=ConvertSize $sum
 
         $result=$i.FullName + " -- " + "{0:N2}" -f ($results)
         write-host "$result"
+
+        LogWrite """folderLocation"":""$folder$i"",""farmFolderSizeKB"":$sum"
     }
-}
+} 
 
 function GetStorjshareList([string]$folders) {
     foreach ($i in $folders.Split(";")) {
@@ -79,6 +83,27 @@ function GetStorjshareList([string]$folders) {
     }
 
     $global:total=ConvertSize $global:total
+}
+
+Function LogWrite([string]$logstring,[string]$color) {
+    $LogTime = Get-Date -Format s
+    $logmessage="$logstring,""timestamp:""$LogTime"""
+    if($logstring) {
+        if(!(Test-Path -pathType container $log_path)) {
+
+            New-Item $log_path -type directory -force | Out-Null
+
+            if(!(Test-Path -pathType container $log_path)) {
+		        ErrorOut "Log Directory $log_path failed to create, try it manually..."
+	        }
+	    }
+        Add-content $log_file -value $logmessage
+    }
+}
+
+function ErrorOut([string]$message,[int]$code=0) {
+    LogWrite -color Red $message    
+    exit $code;
 }
 
 #-----------------------------------------------------------[Execution]------------------------------------------------------------
@@ -100,5 +125,3 @@ write-host ""
 write-host -ForegroundColor Yellow "=============================================="
 write-host -ForegroundColor Cyan "Completed storjshare-size Report"
 write-host -ForegroundColor Yellow "=============================================="
-
-pause
