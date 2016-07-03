@@ -54,7 +54,10 @@
     -tunsvcport [port number] - [optional] Port number of Tunnel Service (Default: 0; random)
     -tunstart [port number] - [optional] Starting port number (Default: 0; random)
     -tunend [port number] - [optional] Ending port number (Default: 0; random)
-
+   -autoupdate
+        -howoften - [optional] Days to check for updates (Default: Every day)
+        -checktime - [optional] Time to check for updates (Default: 3:00am Local Time)
+   -update - [optional] Performs an update only function and skips the rest
 .OUTPUTS
   Return Codes (follows .msi standards) (https://msdn.microsoft.com/en-us/library/windows/desktop/aa376931(v=vs.85).aspx)
 #>
@@ -131,13 +134,25 @@ param(
     [Parameter(Mandatory=$false,ValueFromPipelineByPropertyName=$true)]
     [STRING]$tunend,
 
+    [Parameter(Mandatory=$false)]
+    [SWITCH]$autoupdate,
+
+    [Parameter(Mandatory=$false,ValueFromPipelineByPropertyName=$true)]
+    [STRING]$howoften,
+
+    [Parameter(Mandatory=$false,ValueFromPipelineByPropertyName=$true)]
+    [STRING]$checktime,
+
+    [Parameter(Mandatory=$false)]
+    [SWITCH]$update,
+
     [parameter(Mandatory=$false,ValueFromRemainingArguments=$true)]
     [STRING]$other_args
  )
 
 #---------------------------------------------------------[Initialisations]--------------------------------------------------------
 
-$global:script_version="3.2 Release" # Script version
+$global:script_version="3.4" # Script version
 $global:reboot_needed=""
 $global:noupnp=""
 $global:installsvc="true"
@@ -147,6 +162,10 @@ $global:runas=""
 $global:username=""
 $global:password=""
 $global:autoreboot=""
+$global:autoupdate="true"
+$global:howoften="Daily"
+$global:checktime="3am"
+$global:update=""
 $global:return_code=$global:error_success #default success
 $global:user_profile=$env:userprofile + '\' # (Default: %USERPROFILE%) - runas overwrites this variable
 $global:appdata=$env:appdata + '\' # (Default: %APPDATA%\) - runas overwrites this variable
@@ -169,9 +188,13 @@ $global:tunend="0" #Default 0; random
 #----------------------------------------------------------[Declarations]----------------------------------------------------------
 
 $windows_env=$env:windir
-$save_dir='' + $windows_env + '\Temp\storj\installs' # (Default: %WINDIR%\Temp\storj\installs)
-$log_path='' + $windows_env + '\Temp\storj\cli' # (Default: %WINDIR%\Temp\storj\cli)
-$log_file=$log_path + '\' + 'automate_storjshare_cli.log'; #outputs everything to a file if -silent is used, instead of the console
+$work_directory='' + $windows_env + '\Temp\storj'
+$save_dir=$work_directory + '\installs'
+$storjshare_cli_install_log_path=$save_dir
+$storjshare_cli_install_log_file=$storjshare_cli_install_log_path + '\automate_storjshare_cli.log'; #outputs everything to a file if -silent is used, instead of the console
+$storjshare_cli_log_path=$work_directory + '\cli'
+$storjshare_cli_log="$storjshare_cli_log_path\$global:svcname.log"
+
 $gitforwindows_ver="2.8.3"  #   (Default: 2.8.3)
 
 $nodejs_ver="4.4.5" #make sure to reference LTS branch version (Default: 4.4.5)
@@ -191,8 +214,6 @@ $nssm_ver="2.24" # (Default: 2.24)
 $nssm_location="$windows_env\System32" # Default windows directory
 $nssm_bin='' + $nssm_location + '\' + "nssm.exe" # (Default: %WINDIR%\System32\nssm.exe)
 
-$storjshare_log="$log_path\$global:svcname.log"
-
 $error_success=0  #this is success
 $error_invalid_parameter=87 #this is failiure, invalid parameters referenced
 $error_install_failure=1603 #this is failure, A fatal error occured during installation (default error)
@@ -200,16 +221,31 @@ $error_success_reboot_required=3010  #this is success, but requests for reboot
 
 $automatic_restart_timeout=30  #in seconds Default: 30
 
+$automated_script_path=Split-Path -parent $PSCommandPath
+$automated_script_path=$automated_script_path + '\'
+
 #-----------------------------------------------------------[Functions]------------------------------------------------------------
 
 function handleParameters() {
 
-    if(!(Test-Path -pathType container $log_path)) {
-        New-Item $log_path -type directory -force | Out-Null
+    if(!(Test-Path -pathType container $storjshare_cli_install_log_path)) {
+        New-Item $storjshare_cli_install_log_path -type directory -force | Out-Null
     }
 
-    if(!(Test-Path -pathType container $log_path)) {
-		ErrorOut "Log Directory $log_path failed to create, try it manually..."
+    if(!(Test-Path -pathType container $storjshare_cli_install_log_path)) {
+		ErrorOut "Log Directory $storjshare_cli_install_log_path failed to create, try it manually..."
+	}
+
+    if(Test-Path $storjshare_cli_install_log_file) {
+        Remove-Item $storjshare_cli_install_log_file
+    }
+
+    if(!(Test-Path -pathType container $storjshare_cli_log_path)) {
+        New-Item $storjshare_cli_log_path -type directory -force | Out-Null
+    }
+
+    if(!(Test-Path -pathType container $storjshare_cli_log_path)) {
+		ErrorOut "Log Directory $storjshare_cli_log_path failed to create, try it manually..."
 	}
 
     if(!(Test-Path -pathType container $save_dir)) {
@@ -222,7 +258,7 @@ function handleParameters() {
 
     #checks the silent parameter and if true, writes to log instead of console, also ignores pausing
     if($silent) {
-        LogWrite "Logging to file $log_file"
+        LogWrite "Logging to file $storjshare_cli_install_log_file"
     }
     else
     {
@@ -264,148 +300,173 @@ function handleParameters() {
         Grant-LogOnAsService $global:username
     }
 
-    #checks for noupnp flag
-    if ($noupnp) {
-        $global:noupnp="true"
-    }
-
-    #checks for installsvc flag
-    if ($global:installsvc) {
-        $global:installsvc="true"
-
-        if(!($svcname)) {
-            $global:svcname="$global:svcname"
-        } else {
-            $global:svcname="$svcname"
+    if($update) {
+        $global:update="true"
+        LogWrite "Performing Update Only Function"
+    } else {
+        #checks for noupnp flag
+        if ($noupnp) {
+            $global:noupnp="true"
         }
 
-        if(!($datadir)) {
-            LogWrite "Using default storjshare datadir path: $datadir"
-            $global:datadir="$global:datadir"
-        } else {
-            LogWrite "Using custom storjshare datadir path: $datadir"
-            $global:datadir="$datadir"
-        }
+        #checks for installsvc flag
+        if ($global:installsvc) {
+            $global:installsvc="true"
 
-        if(!($storjpassword)) {
-            if($silent) {
-                ErrorOut -code $global:error_invalid_parameter "ERROR: Service Password not specified"
+            if(!($svcname)) {
+                $global:svcname="$global:svcname"
             } else {
-                $global:storjpassword = GET-RANDOM
-                LogWrite "We generated a password for storjshare since one was not provided"
-                LogWrite "Your Password Is:"
-                LogWrite -Color Cyan "$global:storjpassword"
-                LogWrite -Color Red "Write this down; you will need it to type into storjshare when asked!!!!"
-                Sleep -s 2
-                Write-Host "Press any key to continue ..."
-                $x = $host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+                $global:svcname="$svcname"
             }
-        } else {
-            $global:storjpassword="$storjpassword"
-        }
-    }
 
-    #checks for removesvc flag
-    if ($removesvc) {
-        $global:removesvc="true"
-
-        if(!($svcname)) {
-            $global:svcname="$storshare_svcname"
-        } else {
-            $global:svcname="$svcname"
-        }
-    }
-
-    if($autoreboot) {
-        LogWrite "Will auto-reboot if needed"
-        $global:autoreboot="true"
-    }
-
-    if ($autosetup) {
-        $global:autosetup="true"
-
-        if(!($datadir)) {
-            LogWrite "Using default storjshare datadir path: $datadir"
-            $global:datadir="$global:datadir"
-        } else {
-            LogWrite "Using custom storjshare datadir path: $datadir"
-            $global:datadir="$datadir"
-        }
-
-        if(!($storjpassword)) {
-            ErrorOut -code $global:error_invalid_parameter "ERROR: storjshare Password not specified"
-        } else {
-            $global:storjpassword="$storjpassword"
-        }
-
-        if(!($publicaddr)) {
-            $global:publicaddr="$global:publicaddr"
-        } else {
-            if($publicaddr -eq "[THIS]") {
-                $global:publicaddr="$env:computername.$env:userdnsdomain"
+            if(!($datadir)) {
+                LogWrite "Using default storjshare datadir path: $datadir"
+                $global:datadir="$global:datadir"
             } else {
-                $global:publicaddr="$publicaddr"
+                LogWrite "Using custom storjshare datadir path: $datadir"
+                $global:datadir="$datadir"
+            }
+
+            if(!($storjpassword)) {
+                if($silent) {
+                    ErrorOut -code $global:error_invalid_parameter "ERROR: Service Password not specified"
+                } else {
+                    if(!(Test-Path -pathType container $global:datadir)) {
+                        $global:storjpassword = GET-RANDOM
+                        LogWrite "We generated a password for storjshare since one was not provided"
+                        LogWrite "Your Password Is:"
+                        LogWrite -Color Cyan "$global:storjpassword"
+                        LogWrite -Color Red "Write this down; you will need it to type into storjshare when asked!!!!"
+                        Sleep -s 2
+                        Write-Host "Press any key to continue ..."
+                        $x = $host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+                    }
+                }
+            } else {
+                $global:storjpassword="$storjpassword"
             }
         }
 
-        if(!($svcport)) {
-            $global:svcport="$global:svcport"
-        } else {
-            $global:svcport="$svcport"
+        #checks for removesvc flag
+        if ($removesvc) {
+            $global:removesvc="true"
+
+            if(!($svcname)) {
+                $global:svcname="$storshare_svcname"
+            } else {
+                $global:svcname="$svcname"
+            }
         }
 
-        if(!($nat)) {
-            $global:nat="$global:nat"
-        } else {
-            $global:nat="$nat"
+        if($autoreboot) {
+            LogWrite "Will auto-reboot if needed"
+            $global:autoreboot="true"
         }
 
-        if(!($amt)) {
-            $global:amt="$global:amt"
-        } else {
-            $global:amt="$amt"
+        if ($autosetup) {
+            $global:autosetup="true"
+
+            if(!($datadir)) {
+                LogWrite "Using default storjshare datadir path: $datadir"
+                $global:datadir="$global:datadir"
+            } else {
+                LogWrite "Using custom storjshare datadir path: $datadir"
+                $global:datadir="$datadir"
+            }
+
+            if(!($storjpassword)) {
+                ErrorOut -code $global:error_invalid_parameter "ERROR: storjshare Password not specified"
+            } else {
+                $global:storjpassword="$storjpassword"
+            }
+
+            if(!($publicaddr)) {
+                $global:publicaddr="$global:publicaddr"
+            } else {
+                if($publicaddr -eq "[THIS]") {
+                    $global:publicaddr="$env:computername.$env:userdnsdomain"
+                } else {
+                    $global:publicaddr="$publicaddr"
+                }
+            }
+
+            if(!($svcport)) {
+                $global:svcport="$global:svcport"
+            } else {
+                $global:svcport="$svcport"
+            }
+
+            if(!($nat)) {
+                $global:nat="$global:nat"
+            } else {
+                $global:nat="$nat"
+            }
+
+            if(!($amt)) {
+                $global:amt="$global:amt"
+            } else {
+                $global:amt="$amt"
+            }
+
+            if(!($uri)) {
+                $global:uri="$global:uri"
+            } else {
+                $global:uri="$uri"
+            }
+
+            if(!($loglvl)) {
+                $global:loglvl="$global:loglvl"
+            } else {
+                $global:loglvl="$loglvl"
+            }
+
+            if(!($payaddr)) {
+                $global:payaddr="$global:payaddr"
+            } else {
+                $global:payaddr="$payaddr"
+            }
+
+            if(!($tunconns)) {
+                $global:tunconns="$global:tunconns"
+            } else {
+                $global:tunconns="$tunconns"
+            }
+
+            if(!($tunsvcport)) {
+                $global:tunsvcport="$global:tunsvcport"
+            } else {
+                $global:tunsvcport="$tunsvcport"
+            }
+
+            if(!($tunstart)) {
+                $global:tunstart="$global:tunstart"
+            } else {
+                $global:tunstart="$tunstart"
+            }
+
+            if(!($tunend)) {
+                $global:tunend="$global:tunend"
+            } else {
+                $global:tunend="$tunend"
+            }
         }
 
-        if(!($uri)) {
-            $global:uri="$global:uri"
-        } else {
-            $global:uri="$uri"
-        }
+        if($autoupdate) {
+            $global:autoupdate="true"
 
-        if(!($loglvl)) {
-            $global:loglvl="$global:loglvl"
-        } else {
-            $global:loglvl="$loglvl"
-        }
+            if(!($howoften)) {
+                $global:howoften=$global:howoften
+            } else {
+                $global:howoften=$howoften
+            }
 
-        if(!($payaddr)) {
-            $global:payaddr="$global:payaddr"
-        } else {
-            $global:payaddr="$payaddr"
-        }
+            if(!($checktime)) {
+                $global:checktime=$global:checktime
+            } else {
+                $global:checktime=$checktime
+            }
 
-        if(!($tunconns)) {
-            $global:tunconns="$global:tunconns"
-        } else {
-            $global:tunconns="$tunconns"
-        }
-
-        if(!($tunsvcport)) {
-            $global:tunsvcport="$global:tunsvcport"
-        } else {
-            $global:tunsvcport="$tunsvcport"
-        }
-
-        if(!($tunstart)) {
-            $global:tunstart="$global:tunstart"
-        } else {
-            $global:tunstart="$tunstart"
-        }
-
-        if(!($tunend)) {
-            $global:tunend="$global:tunend"
-        } else {
-            $global:tunend="$tunend"
+            LogWrite "Auto-update enabled to happen every $global:howoften day(s) at $global:checktime"
         }
     }
 
@@ -420,15 +481,15 @@ Function LogWrite([string]$logstring,[string]$color) {
     $logmessage="["+$LogTime+"] "+$logstring
     if($silent) {
         if($logstring) {
-            if(!(Test-Path -pathType container $log_path)) {
+            if(!(Test-Path -pathType container $storjshare_cli_install_log_path)) {
 
-                New-Item $log_path -type directory -force | Out-Null
+                New-Item $storjshare_cli_install_log_path -type directory -force | Out-Null
 
-                if(!(Test-Path -pathType container $log_path)) {
-		            ErrorOut "Log Directory $log_path failed to create, try it manually..."
+                if(!(Test-Path -pathType container $storjshare_cli_install_log_path)) {
+		            ErrorOut "Log Directory $storjshare_cli_install_log_path failed to create, try it manually..."
 	            }
 	        }
-            Add-content $log_file -value $logmessage
+            Add-content $storjshare_cli_install_log_file -value $logmessage
         }
     } else {
         if(!$logstring) {
@@ -835,7 +896,7 @@ function storjshare-cliCheck() {
     #write npm logs to log file if in silent mode
     if($silent) {
         LogWrite "npm $Arguments results"
-        Add-content $log_file -value $output
+        Add-content $storjshare_cli_install_log_file -value $output
     }
 
     if (!$output.Length -gt 0) {
@@ -848,7 +909,7 @@ function storjshare-cliCheck() {
         #write npm logs to log file if in silent mode
         if($silent) {
             LogWrite "npm $Arguments results"
-            Add-content $log_file -value $result
+            Add-content $storjshare_cli_install_log_file -value $result
         }
 
         if ($result.Length -gt 0) {
@@ -861,6 +922,14 @@ function storjshare-cliCheck() {
     {
         LogWrite "storjshare-cli already installed."
 
+        LogWrite "Stopping $global:svcname service (if applicable)"
+        Stop-Service $global:svcname -ErrorAction SilentlyContinue
+
+        if(Test-Path $storjshare_cli_log) {
+            LogWrite "Removing Log file: $storjshare_cli_log"
+            Remove-Item $storjshare_cli_log
+        }
+
         LogWrite -color Cyan "Performing storjshare-cli Update..."
 
         #$Arguments = "update -g storjshare-cli"
@@ -870,7 +939,7 @@ function storjshare-cliCheck() {
         #write npm logs to log file if in silent mode
         if($silent) {
             LogWrite "npm $Arguments results"
-            Add-content $log_file -value $result
+            Add-content $storjshare_cli_install_log_file -value $result
         }
 
         if ($result.Length -gt 0) {
@@ -887,6 +956,8 @@ function storjshare-cliCheck() {
         if(!$version) {
             ErrorOut "storjshare-cli Version is Unknown - Error"
         }
+
+        Start-Service -Name "$global:svcname"
 
         LogWrite -color Green "storjshare-cli Installed Version: $version"
     }
@@ -990,12 +1061,12 @@ function InstallMSI([string]$installer) {
 
 function UseNPM([string]$Arguments) {
 	$filename = 'npm_output.log';
-	$save_path = '' + $log_path + '\' + $filename;
+	$save_path = '' + $storjshare_cli_install_log_path + '\' + $filename;
 
 	$filename_err = 'npm_output_err.log';
-	$save_path_err = '' + $log_path + '\' + $filename_err;
-	if(!(Test-Path -pathType container $log_path)) {
-	    ErrorOut "Log directory $log_path does not exist";
+	$save_path_err = '' + $storjshare_cli_install_log_path + '\' + $filename_err;
+	if(!(Test-Path -pathType container $storjshare_cli_install_log_path)) {
+	    ErrorOut "Log directory $storjshare_cli_install_log_path does not exist";
 	}
 
 	if(!(Test-Path -pathType container $global:npm_path)) {
@@ -1121,10 +1192,10 @@ function DisableUPNP() {
 
 function SetUPNP([string]$upnp_set) {
 	$filename = 'upnp_output.log';
-	$save_path = '' + $log_path + '\' + $filename;
+	$save_path = '' + $storjshare_cli_install_log_path + '\' + $filename;
 
-	if(!(Test-Path -pathType container $log_path)) {
-	    ErrorOut "Log directory $log_path does not exist";
+	if(!(Test-Path -pathType container $storjshare_cli_install_log_path)) {
+	    ErrorOut "Log directory $storjshare_cli_install_log_path does not exist";
 	}
 	
     $Arguments="advfirewall firewall set rule group=`"Network Discovery`" new enable=$($upnp_set)"
@@ -1146,11 +1217,15 @@ function SetUPNP([string]$upnp_set) {
 }
 
 function CheckUPNP() {
-    LogWrite "Checking UPNP Flag..."
-    if($global:noupnp) {
-        DisableUPNP
+    if(!($global:update)) {
+        LogWrite "Checking UPNP Flag..."
+        if($global:noupnp) {
+            DisableUPNP
+        } else {
+            EnableUPNP
+        }
     } else {
-        EnableUPNP
+        LogWrite "Skipping UPNP checks, Update function flagged..."
     }
 }
 
@@ -1166,6 +1241,7 @@ function CheckService([string]$svc_name) {
 function RemoveService([string]$svc_name) {
     LogWrite "Checking for service: $svc_name"
     if(CheckService $svc_name -eq 1) {
+        Stop-Service $svc_name -ErrorAction SilentlyContinue
         $serviceToRemove = Get-WmiObject -Class Win32_Service -Filter "name='$svc_name'"
         $serviceToRemove.delete()
         if(CheckService $svc_name -eq 1) {
@@ -1180,9 +1256,9 @@ function RemoveService([string]$svc_name) {
 
 function UseNSSM([string]$Arguments) {
 	$filename = 'nssm_output.log';
-	$save_path = '' + $log_path + '\' + $filename;
-	if(!(Test-Path -pathType container $log_path)) {
-	    ErrorOut "Save directory $log_path does not exist";
+	$save_path = '' + $storjshare_cli_install_log_path + '\' + $filename;
+	if(!(Test-Path -pathType container $storjshare_cli_install_log_path)) {
+	    ErrorOut "Save directory $storjshare_cli_install_log_path does not exist";
 	}
 	
     $proc = Start-Process "nssm" -ArgumentList $Arguments -RedirectStandardOutput "$save_path" -Wait -NoNewWindow
@@ -1259,40 +1335,54 @@ function nssmCheck([string]$version) {
              LogWrite -color Green "NSSM already installed"
         }
 
-        LogWrite "Checking for $global:svcname to see if it exists"
-        RemoveService $global:svcname
+        if(!($global:update)) {
+            LogWrite "Checking for $global:svcname to see if it exists"
+            
+            if(!(CheckService $global:svcname)) {
+                if($global:installsvc) {
 
-        if($global:installsvc) {
+                    LogWrite "Checking if storjshare-cli data directory exists..."
+	                if(!(Test-Path -pathType container $global:datadir)) {
+	                    ErrorOut "sorjshare-cli directory $global:datadir does not exist, you may want to setup storjshare-cli first.";
+	                }
 
-            LogWrite "Checking if storjshare-cli data directory exists..."
-	        if(!(Test-Path -pathType container $global:datadir)) {
-	            ErrorOut "sorjshare-cli directory $global:datadir does not exist, you may want to setup storjshare-cli first.";
-	        }
+                    LogWrite "Checking if storjshare-cli log directory exists..."
+	                if(!(Test-Path -pathType container $storjshare_cli_log_path)) {
+	                    ErrorOut "storjshare-cli log directory $storjshare_cli_log_path does not exist, you may want to setup storjshare-cli first.";
+	                }
 
-            LogWrite "Installing service $global:svcname"
-            $Arguments="install $global:svcname $storjshare_bin start --datadir $global:datadir --password $global:storjpassword >> $storjshare_log"
-            $results=UseNSSM $Arguments
-            if(CheckService($global:svcname)) {
-                LogWrite -color Green "Service $global:svcname Installed Successfully"
+                    LogWrite "Installing service $global:svcname"
+                    $Arguments="install $global:svcname $storjshare_bin start --datadir $global:datadir --password $global:storjpassword >> $storjshare_cli_log"
+                    $results=UseNSSM $Arguments
+                    if(CheckService($global:svcname)) {
+                        LogWrite -color Green "Service $global:svcname Installed Successfully"
+                    } else {
+                        ErrorOut "Failed to install service $global:svcname"
+                    }
+
+                    if($global:runas) {
+                        ChangeLogonService -svc_name $global:svcname -username $global:username -password $global:password
+                    }
+                }
+                ModifyService "$global:svcname" "Automatic"
+                LogWrite "Starting $global:svcname service..."
+                Start-Service $global:svcname -ErrorAction SilentlyContinue
             } else {
-                ErrorOut "Failed to install service $global:svcname"
+                LogWrite "Service already exists, skipping..."
+                Start-Service $global:svcname -ErrorAction SilentlyContinue
             }
-
-            if($global:runas) {
-                ChangeLogonService -svc_name $global:svcname -username $global:username -password $global:password
-            }
+        } else {
+            LogWrite "Skipping service functions, in update mode"
         }
-
-        Start-Service -Name "$global:svcname"
     }
 }
 
 function GetUserEnvironment([string]$env_var) {
 	$filename = 'user_env.log';
-	$save_path = '' + $log_path + '\' + $filename;
+	$save_path = '' + $storjshare_cli_install_log_path + '\' + $filename;
 
-	if(!(Test-Path -pathType container $log_path)) {
-	    ErrorOut "Save directory $log_path does not exist";
+	if(!(Test-Path -pathType container $storjshare_cli_install_log_path)) {
+	    ErrorOut "Save directory $storjshare_cli_install_log_path does not exist";
 	}
 
     $Arguments="/c ECHO $env_var"
@@ -1314,8 +1404,8 @@ param(
     [string[]] $users
     )
     #Get list of currently used SIDs 
-    secedit /export /cfg "$log_path\tempexport.inf"
-    $curSIDs = Select-String "$log_path\tempexport.inf" -Pattern "SeServiceLogonRight" 
+    secedit /export /cfg "$storjshare_cli_install_log_path\tempexport.inf"
+    $curSIDs = Select-String "$storjshare_cli_install_log_path\tempexport.inf" -Pattern "SeServiceLogonRight" 
     $Sids = $curSIDs.line 
     $sidstring = ""
     foreach($user in $users){
@@ -1328,19 +1418,19 @@ param(
     if($sidstring){
         $newSids = $sids + $sidstring
         LogWrite "New Sids: $newSids"
-        $tempinf = Get-Content "$log_path\tempexport.inf"
+        $tempinf = Get-Content "$storjshare_cli_install_log_path\tempexport.inf"
         $tempinf = $tempinf.Replace($Sids,$newSids)
-        Add-Content -Path "$log_path\tempimport.inf" -Value $tempinf
-        secedit /import /db "$log_path\secedit.sdb" /cfg "$log_path\tempimport.inf" 
-        secedit /configure /db "$log_path\secedit.sdb"
+        Add-Content -Path "$storjshare_cli_install_log_path\tempimport.inf" -Value $tempinf
+        secedit /import /db "$storjshare_cli_install_log_path\secedit.sdb" /cfg "$storjshare_cli_install_log_path\tempimport.inf" 
+        secedit /configure /db "$storjshare_cli_install_log_path\secedit.sdb"
  
         gpupdate /force 
     }else{
         LogWrite "No new sids, skipping..."
     }
-    del "$log_path\tempimport.inf" -force -ErrorAction SilentlyContinue
-    del "$log_path\secedit.sdb" -force -ErrorAction SilentlyContinue
-    del "$log_path\tempexport.inf" -force
+    del "$storjshare_cli_install_log_path\tempimport.inf" -force -ErrorAction SilentlyContinue
+    del "$storjshare_cli_install_log_path\secedit.sdb" -force -ErrorAction SilentlyContinue
+    del "$storjshare_cli_install_log_path\tempexport.inf" -force
 }
 
 function storjshare-enterdata($processid, [string] $command) {
@@ -1351,103 +1441,144 @@ function storjshare-enterdata($processid, [string] $command) {
 }
 
 function setup-storjshare() {
-	if(!(Test-Path -pathType container $global:datadir)) {
-        if($global:autosetup) {
-            if(($global:storjpassword) -AND ($global:datadir)) {
-	            $filename = 'storjshare_output.log';
-	            $save_path = '' + $log_path + '\' + $filename;
-	            if(!(Test-Path -pathType container $log_path)) {
-	                ErrorOut "Save directory $log_path does not exist";
-	            }
+    if(!($global:update)) {
+	    if(!(Test-Path -pathType container $global:datadir)) {
+            if($global:autosetup) {
+                if(($global:storjpassword) -AND ($global:datadir)) {
+	                $filename = 'storjshare_output.log';
+	                $save_path = '' + $storjshare_cli_install_log_path + '\' + $filename;
+	                if(!(Test-Path -pathType container $storjshare_cli_install_log_path)) {
+	                    ErrorOut "Save directory $storjshare_cli_install_log_path does not exist";
+	                }
 
-                LogWrite "storjshare directory $global:datadir does not exist"
-                LogWrite "Performing storjshare Setup in this directory"
+                    LogWrite "storjshare directory $global:datadir does not exist"
+                    LogWrite "Performing storjshare Setup in this directory"
 
-                add-type -AssemblyName microsoft.VisualBasic
-                add-type -AssemblyName System.Windows.Forms
+                    add-type -AssemblyName microsoft.VisualBasic
+                    add-type -AssemblyName System.Windows.Forms
 
-                LogWrite "Starting storjshare key sequence. Please wait for the dialog to close as this may take a couple minutes."
-                Start-Sleep -s 2
+                    LogWrite "Starting storjshare key sequence. Please wait for the dialog to close as this may take a couple minutes."
+                    Start-Sleep -s 2
+
+                    $Arguments="setup --datadir $global:datadir"
+                    $proc = Start-Process "storjshare" -ArgumentList $Arguments -RedirectStandardOutput "$save_path"
+
+                    if(!(Test-Path $save_path)) {
+                        ErrorOut "storjshare command $Arguments failed to execute..."
+                    }
+
+                    Start-Sleep -s 3
+                    $processstorjshare=Get-Process | Where-Object { $_.MainWindowTitle -like '*\System32\cmd.exe*' } | select -expand id
+
+                    #public ip / hostname (default: 127.0.0.1)
+                    storjshare-enterdata -processid $processstorjshare -command "$global:publicaddr"
+
+                    #TCP port number service should use (default: 4000)
+                    storjshare-enterdata -processid $processstorjshare -command "$global:svcport"
+
+                    #Use NAT traversal (default: true)
+                    storjshare-enterdata -processid $processstorjshare -command "$global:nat"
+
+                    #URI of known seed (default: leave blank)
+                    storjshare-enterdata -processid $processstorjshare -command "$global:uri"
+
+                    #Enter path to store configuration (hit enter given argument)
+                    storjshare-enterdata -processid $processstorjshare -command ""
+
+                    #Log Level (default 3)
+                    storjshare-enterdata -processid $processstorjshare -command "$global:loglvl"
+
+                    #Amount of storage to use (default 2GB)
+                    storjshare-enterdata -processid $processstorjshare -command "$global:amt"
+
+                    #Payment Address  (default blank)
+                    storjshare-enterdata -processid $processstorjshare -command "$global:payaddr"
+
+                    #telemetry (force true and hit enter)
+                    storjshare-enterdata -processid $processstorjshare -command "true"
+
+                    #number of tunnel connections (default 3)
+                    storjshare-enterdata -processid $processstorjshare -command "$global:tunconns"
+
+                    #TCP port tunnel service (default 0 - random)
+                    storjshare-enterdata -processid $processstorjshare -command "$global:tunsvcport"
+
+                    #TCP start tunnel port (default 0 - random)
+                    storjshare-enterdata -processid $processstorjshare -command "$global:tunstart"
+
+                    #TCP end tunnel port (default port 0 - random)
+                    storjshare-enterdata -processid $processstorjshare -command "$global:tunend"
+
+                    #Path encrypted files (hit enter given argument)
+                    storjshare-enterdata -processid $processstorjshare -command ""
+
+                    #password to protect data (if none entered by user fail)
+                    storjshare-enterdata -processid $processstorjshare -command "$global:storjpassword"
+        
+                    $results=(Get-Content -Path "$save_path") | Where-Object {$_ -like '*error*'}
+
+                    if($results) {
+                        ErrorOut "storjshare command $Arguments failed to execute..."
+                    }
+
+                    Remove-Item "$save_path"
+                } else {
+                    LogWrite "Missing required parameters; skipping setup..."
+                }
+            } else {
+                LogWrite "Manually going through setup"
+                LogWrite "You will be prompted by storjshare to enter various values"
+                LogWrite -Yellow "Any questions around these values can be answered on https://github.com/Storj/storjshare-cli"
 
                 $Arguments="setup --datadir $global:datadir"
-                $proc = Start-Process "storjshare" -ArgumentList $Arguments -RedirectStandardOutput "$save_path"
+                $proc = Start-Process "storjshare" -ArgumentList $Arguments -Wait
 
-                if(!(Test-Path $save_path)) {
-                    ErrorOut "storjshare command $Arguments failed to execute..."
-                }
-
-                Start-Sleep -s 3
-                $processstorjshare=Get-Process | Where-Object { $_.MainWindowTitle -like '*\System32\cmd.exe*' } | select -expand id
-
-                #public ip / hostname (default: 127.0.0.1)
-                storjshare-enterdata -processid $processstorjshare -command "$global:publicaddr"
-
-                #TCP port number service should use (default: 4000)
-                storjshare-enterdata -processid $processstorjshare -command "$global:svcport"
-
-                #Use NAT traversal (default: true)
-                storjshare-enterdata -processid $processstorjshare -command "$global:nat"
-
-                #URI of known seed (default: leave blank)
-                storjshare-enterdata -processid $processstorjshare -command "$global:uri"
-
-                #Enter path to store configuration (hit enter given argument)
-                storjshare-enterdata -processid $processstorjshare -command ""
-
-                #Log Level (default 3)
-                storjshare-enterdata -processid $processstorjshare -command "$global:loglvl"
-
-                #Amount of storage to use (default 2GB)
-                storjshare-enterdata -processid $processstorjshare -command "$global:amt"
-
-                #Payment Address  (default blank)
-                storjshare-enterdata -processid $processstorjshare -command "$global:payaddr"
-
-                #telemetry (force true and hit enter)
-                storjshare-enterdata -processid $processstorjshare -command "true"
-
-                #number of tunnel connections (default 3)
-                storjshare-enterdata -processid $processstorjshare -command "$global:tunconns"
-
-                #TCP port tunnel service (default 0 - random)
-                storjshare-enterdata -processid $processstorjshare -command "$global:tunsvcport"
-
-                #TCP start tunnel port (default 0 - random)
-                storjshare-enterdata -processid $processstorjshare -command "$global:tunstart"
-
-                #TCP end tunnel port (default port 0 - random)
-                storjshare-enterdata -processid $processstorjshare -command "$global:tunend"
-
-                #Path encrypted files (hit enter given argument)
-                storjshare-enterdata -processid $processstorjshare -command ""
-
-                #password to protect data (if none entered by user fail)
-                storjshare-enterdata -processid $processstorjshare -command "$global:storjpassword"
-        
-                $results=(Get-Content -Path "$save_path") | Where-Object {$_ -like '*error*'}
-
-                if($results) {
-                    ErrorOut "storjshare command $Arguments failed to execute..."
-                }
-
-                Remove-Item "$save_path"
-            } else {
-                LogWrite "Missing required parameters; skipping setup..."
+                LogWrite "Completed entering storjshare values...moving on"
             }
-        } else {
-            LogWrite "Manually going through setup"
-            LogWrite "You will be prompted by storjshare to enter various values"
-            LogWrite -Yellow "Any questions around these values can be answered on https://github.com/Storj/storjshare-cli"
 
-            $Arguments="setup --datadir $global:datadir"
-            $proc = Start-Process "storjshare" -ArgumentList $Arguments -Wait
-
-            LogWrite "Completed entering storjshare values...moving on"
+            LogWrite "Starting $global:svcname service..."
+            Start-Service $global:svcname -ErrorAction SilentlyContinue
         }
+        else
+        {
+            LogWrite "Skipping storjshare setup; data setup files exist..."
+        }
+    } else {
+        LogWrite "Skipping setup check, in update mode..."
     }
-    else
-    {
-        LogWrite "Skipping storjshare setup; data setup files exist..."
+}
+
+function storjshare_cli_checkver([string]$script_ver) {
+    LogWrite "Checking for Storj Script Version Environment Variable..."
+    $env:STORJSHARE_SCRIPT_VER = [System.Environment]::GetEnvironmentVariable("STORJSHARE_SCRIPT_VER","Machine")
+    if ($env:STORJSHARE_SCRIPT_VER -eq $script_ver) {
+    	LogWrite "STORJSHARE_SCRIPT_VER Environment Variable $script_ver already matches, skipping..."
+    } else {
+        Set-ItemProperty -Path 'Registry::HKEY_LOCAL_MACHINE\System\CurrentControlSet\Control\Session Manager\Environment' -Name STORJSHARE_SCRIPT_VER -Value $script_ver -ErrorAction SilentlyContinue
+        LogWrite "Storjshare Script Version Environment Variable Added: $script_ver"
+    }
+}
+
+function autoupdate($howoften) {
+
+    if(!($global:update)) {
+
+        Copy-Item "${automated_script_path}automate_storj_cli.ps1" "$global:npm_path" -force -ErrorAction SilentlyContinue
+
+        if($global:autoupdate) {
+            $Arguments="-NoProfile -NoLogo -Noninteractive -WindowStyle Hidden -ExecutionPolicy Bypass ""${global:npm_path}automate_storj_cli.ps1"" -silent -update"
+            $action = New-ScheduledTaskAction -Execute 'Powershell.exe' -Argument $Arguments
+            $trigger =  New-ScheduledTaskTrigger -Daily -At $global:checktime
+            #can use -Credential as needed
+
+            if($global:runas) {
+                 Register-ScheduledTask -Action $action -Credential $global:credential -Trigger $trigger -TaskName "storjshare Auto-Update" -Description "Updates storjshare software $howoften at $global:checktime local time" -RunLevel Highest
+            } else {
+                 Register-ScheduledTask -Action $action -Trigger $trigger -TaskName "storjshare Auto-Update" -Description "Updates storjshare software $howoften at $global:checktime local time" -RunLevel Highest
+            }
+        }
+    } else {
+        LogWrite "Skipping autoupdate, update method on..."
     }
 }
 
@@ -1517,10 +1648,24 @@ LogWrite -color Green "Service Review Completed"
 LogWrite ""
 LogWrite -color Yellow "=============================================="
 LogWrite ""
-LogWrite -color Cyan "You may now follow the remaining setup instructions here (if applicable):"
-LogWrite -color Cyan "https://github.com/Storj/storjshare-cli#installation"
+LogWrite -color Yellow "=============================================="
+LogWrite ""
+LogWrite -color Cyan "Reviewing Script Registry Version..."
+storjshare_cli_checkver $global:script_version
+LogWrite -color Green "Script Registry Version Completed"
+LogWrite ""
+LogWrite -color Yellow "=============================================="
+LogWrite ""
+LogWrite -color Cyan "Reviewing Auto-Update Ability..."
+autoupdate $global:howoften
+LogWrite -color Green "Auto-Update AbilityReview Completed"
 LogWrite ""
 LogWrite -color Yellow "=============================================="
 LogWrite -color Cyan "Completed storjshare-cli Automated Management"
+LogWrite -color Cyan "storjshare-cli should now be running as a windows service."
+LogWrite -color Cyan "You can check Control Panel > Administrative Tools -> Services -> storjshare-cli and see if the service is running"
+LogWrite -color Cyan "You can also check %WINDIR%\Temp\storj\cli to see if any logs are generating and what the details of the logs are saying"
+LogWrite -color Cyan "$global:datadir\farms.db folder should slowly start building up shards (ldb files) if everything is configured properly"
+LogWrite ""
 LogWrite -color Yellow "=============================================="
 ErrorOut -code $global:return_code
