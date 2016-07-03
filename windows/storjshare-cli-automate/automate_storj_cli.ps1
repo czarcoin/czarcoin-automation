@@ -54,7 +54,7 @@
     -tunsvcport [port number] - [optional] Port number of Tunnel Service (Default: 0; random)
     -tunstart [port number] - [optional] Starting port number (Default: 0; random)
     -tunend [port number] - [optional] Ending port number (Default: 0; random)
-   -autoupdate
+   -noautoupdate
         -howoften - [optional] Days to check for updates (Default: Every day)
         -checktime - [optional] Time to check for updates (Default: 3:00am Local Time)
    -update - [optional] Performs an update only function and skips the rest
@@ -135,7 +135,7 @@ param(
     [STRING]$tunend,
 
     [Parameter(Mandatory=$false)]
-    [SWITCH]$autoupdate,
+    [SWITCH]$noautoupdate,
 
     [Parameter(Mandatory=$false,ValueFromPipelineByPropertyName=$true)]
     [STRING]$howoften,
@@ -162,7 +162,7 @@ $global:runas=""
 $global:username=""
 $global:password=""
 $global:autoreboot=""
-$global:autoupdate="true"
+$global:noautoupdate=""
 $global:howoften="Daily"
 $global:checktime="3am"
 $global:update=""
@@ -451,9 +451,9 @@ function handleParameters() {
             }
         }
 
-        if($autoupdate) {
-            $global:autoupdate="true"
-
+        if($noautoupdate) {
+            $global:noautoupdate="true"
+        } else {
             if(!($howoften)) {
                 $global:howoften=$global:howoften
             } else {
@@ -466,7 +466,7 @@ function handleParameters() {
                 $global:checktime=$checktime
             }
 
-            LogWrite "Auto-update enabled to happen every $global:howoften day(s) at $global:checktime"
+            LogWrite "Auto-update disabled to happen every $global:howoften day(s) at $global:checktime"
         }
     }
 
@@ -1435,9 +1435,9 @@ param(
 
 function storjshare-enterdata($processid, [string] $command) {
     [Microsoft.VisualBasic.Interaction]::AppActivate($processid)
-    Start-Sleep -milliseconds 500
-    [System.Windows.Forms.SendKeys]::SendWait("$command{ENTER}")
     Start-Sleep -s 1
+    [System.Windows.Forms.SendKeys]::SendWait("$command{ENTER}")
+    Start-Sleep -s 2
 }
 
 function setup-storjshare() {
@@ -1564,18 +1564,23 @@ function autoupdate($howoften) {
     if(!($global:update)) {
 
         Copy-Item "${automated_script_path}automate_storj_cli.ps1" "$global:npm_path" -force -ErrorAction SilentlyContinue
+        LogWrite "Script file copied to $global:npm_path"
 
-        if($global:autoupdate) {
+        if(!($global:noautoupdate)) {
             $Arguments="-NoProfile -NoLogo -Noninteractive -WindowStyle Hidden -ExecutionPolicy Bypass ""${global:npm_path}automate_storj_cli.ps1"" -silent -update"
             $action = New-ScheduledTaskAction -Execute 'Powershell.exe' -Argument $Arguments
             $trigger =  New-ScheduledTaskTrigger -Daily -At $global:checktime
             #can use -Credential as needed
 
             if($global:runas) {
-                 Register-ScheduledTask -Action $action -Credential $global:credential -Trigger $trigger -TaskName "storjshare Auto-Update" -Description "Updates storjshare software $howoften at $global:checktime local time" -RunLevel Highest
+                 Register-ScheduledTask -Action $action -User $global:username -Password "$global:password" -Trigger $trigger -TaskName "storjshare Auto-Update" -Description "Updates storjshare software $howoften at $global:checktime local time" -RunLevel Highest
             } else {
                  Register-ScheduledTask -Action $action -Trigger $trigger -TaskName "storjshare Auto-Update" -Description "Updates storjshare software $howoften at $global:checktime local time" -RunLevel Highest
             }
+
+            LogWrite "Scheduled Task Created"
+        } else {
+            LogWrite "No autoupdate specified skipping"
         }
     } else {
         LogWrite "Skipping autoupdate, update method on..."
