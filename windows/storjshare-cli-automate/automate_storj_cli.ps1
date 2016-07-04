@@ -152,7 +152,7 @@ param(
 
 #---------------------------------------------------------[Initialisations]--------------------------------------------------------
 
-$global:script_version="3.4" # Script version
+$global:script_version="3.5" # Script version
 $global:reboot_needed=""
 $global:noupnp=""
 $global:installsvc="true"
@@ -923,7 +923,10 @@ function storjshare-cliCheck() {
         LogWrite "storjshare-cli already installed."
 
         LogWrite "Stopping $global:svcname service (if applicable)"
+
         Stop-Service $global:svcname -ErrorAction SilentlyContinue
+        $services=Get-Service -Name *storjshare-cli*
+        $services | ForEach-Object{Stop-Service $_.name -ErrorAction SilentlyContinue}
 
         if(Test-Path $storjshare_cli_log) {
             LogWrite "Removing Log file: $storjshare_cli_log"
@@ -957,7 +960,9 @@ function storjshare-cliCheck() {
             ErrorOut "storjshare-cli Version is Unknown - Error"
         }
 
-        Start-Service -Name "$global:svcname"
+        $services=Get-Service -Name *storjshare-cli*
+        $services | ForEach-Object{Start-Service -Name "$_.name" -ErrorAction SilentlyContinue}
+        Start-Service -Name $global:svcname -ErrorAction SilentlyContinue
 
         LogWrite -color Green "storjshare-cli Installed Version: $version"
     }
