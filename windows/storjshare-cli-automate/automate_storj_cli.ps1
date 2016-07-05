@@ -43,7 +43,9 @@
     -datadir [directory] - [optional] Data Directory of Storjshare
     -storjpassword [password] - [required] Password for Storjshare Directory
     -publicaddr [ip or dns] - [optional] Public IP or DNS of storjshare (Default: 127.0.0.1)
-        *Note use [THIS] to use the FQDN of the current computer
+        *Note use [THIS] to use the the hostname of the computer
+        For example: [THIS] replaces with hostname
+        For example: [THIS].domain.com replaces with hostname.domain.com
     -svcport [port number] - [optional] TCP Port Number of storjshare Service (Default: 4000)
     -nat [true | false] - [optional] Turn on or Off Nat (UPNP) [Default: true]
     -uri [uri of known good seed] - [optional] URI of a known good seed (Default: [blank])
@@ -152,7 +154,7 @@ param(
 
 #---------------------------------------------------------[Initialisations]--------------------------------------------------------
 
-$global:script_version="3.5" # Script version
+$global:script_version="3.7" # Script version
 $global:reboot_needed=""
 $global:noupnp=""
 $global:installsvc="true"
@@ -193,7 +195,7 @@ $save_dir=$work_directory + '\installs'
 $storjshare_cli_install_log_path=$save_dir
 $storjshare_cli_install_log_file=$storjshare_cli_install_log_path + '\automate_storjshare_cli.log'; #outputs everything to a file if -silent is used, instead of the console
 $storjshare_cli_log_path=$work_directory + '\cli'
-$storjshare_cli_log="$storjshare_cli_log_path\$global:svcname.log"
+$global:storjshare_cli_log="$storjshare_cli_log_path\$global:svcname.log"
 
 $gitforwindows_ver="2.8.3"  #   (Default: 2.8.3)
 
@@ -319,6 +321,8 @@ function handleParameters() {
                 $global:svcname="$svcname"
             }
 
+            $global:storjshare_cli_log="$storjshare_cli_log_path\$global:svcname.log"
+
             if(!($datadir)) {
                 LogWrite "Using default storjshare datadir path: $datadir"
                 $global:datadir="$global:datadir"
@@ -356,6 +360,8 @@ function handleParameters() {
             } else {
                 $global:svcname="$svcname"
             }
+
+            $global:storjshare_cli_log="$storjshare_cli_log_path\$global:svcname.log"
         }
 
         if($autoreboot) {
@@ -383,11 +389,7 @@ function handleParameters() {
             if(!($publicaddr)) {
                 $global:publicaddr="$global:publicaddr"
             } else {
-                if($publicaddr -eq "[THIS]") {
-                    $global:publicaddr="$env:computername.$env:userdnsdomain"
-                } else {
-                    $global:publicaddr="$publicaddr"
-                }
+                $global:publicaddr=$publicaddr.Replace("[THIS]",$env:computername)
             }
 
             if(!($svcport)) {
@@ -928,9 +930,9 @@ function storjshare-cliCheck() {
         $services=Get-Service -Name *storjshare-cli*
         $services | ForEach-Object{Stop-Service $_.name -ErrorAction SilentlyContinue}
 
-        if(Test-Path $storjshare_cli_log) {
-            LogWrite "Removing Log file: $storjshare_cli_log"
-            Remove-Item $storjshare_cli_log
+        if(Test-Path $global:storjshare_cli_log) {
+            LogWrite "Removing Log file: $global:storjshare_cli_log"
+            Remove-Item $global:storjshare_cli_log
         }
 
         LogWrite -color Cyan "Performing storjshare-cli Update..."
@@ -961,7 +963,7 @@ function storjshare-cliCheck() {
         }
 
         $services=Get-Service -Name *storjshare-cli*
-        $services | ForEach-Object{Start-Service -Name "$_.name" -ErrorAction SilentlyContinue}
+        $services | ForEach-Object{Start-Service -Name $_.name -ErrorAction SilentlyContinue}
         Start-Service -Name $global:svcname -ErrorAction SilentlyContinue
 
         LogWrite -color Green "storjshare-cli Installed Version: $version"
@@ -1357,7 +1359,7 @@ function nssmCheck([string]$version) {
 	                }
 
                     LogWrite "Installing service $global:svcname"
-                    $Arguments="install $global:svcname $storjshare_bin start --datadir $global:datadir --password $global:storjpassword >> $storjshare_cli_log"
+                    $Arguments="install $global:svcname $storjshare_bin start --datadir $global:datadir --password $global:storjpassword >> $global:storjshare_cli_log"
                     $results=UseNSSM $Arguments
                     if(CheckService($global:svcname)) {
                         LogWrite -color Green "Service $global:svcname Installed Successfully"
@@ -1366,7 +1368,7 @@ function nssmCheck([string]$version) {
                     }
 
                     if($global:runas) {
-                        ChangeLogonService -svc_name $global:svcname -username $global:username -password $global:password
+                        ChangeLogonService -svc_name $global:svcname -username ".\$global:username" -password $global:password
                     }
                 }
                 ModifyService "$global:svcname" "Automatic"
@@ -1466,7 +1468,12 @@ function setup-storjshare() {
                     Start-Sleep -s 2
 
                     $Arguments="setup --datadir $global:datadir"
-                    $proc = Start-Process "storjshare" -ArgumentList $Arguments -RedirectStandardOutput "$save_path"
+                    
+                    if($global:runas) {
+                        $proc = Start-Process "storjshare" -Credential $global:credential -WorkingDirectory "$global:npm_path" -ArgumentList $Arguments -RedirectStandardOutput "$save_path"
+                    } else {
+                        $proc = Start-Process "storjshare" -ArgumentList $Arguments -RedirectStandardOutput "$save_path"
+                    }
 
                     if(!(Test-Path $save_path)) {
                         ErrorOut "storjshare command $Arguments failed to execute..."
@@ -1550,6 +1557,13 @@ function setup-storjshare() {
         }
     } else {
         LogWrite "Skipping setup check, in update mode..."
+        $services=Get-Service -Name *storjshare-cli*
+        $services | ForEach-Object{
+            $service=$_.name
+            Remove-Item "$storjshare_cli_log_path\$service.log"
+            Start-Service -Name $service -ErrorAction SilentlyContinue
+        }
+        LogWrite "Re-started services"
     }
 }
 
@@ -1577,11 +1591,11 @@ function autoupdate($howoften) {
             $trigger =  New-ScheduledTaskTrigger -Daily -At $global:checktime
             #can use -Credential as needed
 
-            if($global:runas) {
-                 Register-ScheduledTask -Action $action -User $global:username -Password "$global:password" -Trigger $trigger -TaskName "storjshare Auto-Update" -Description "Updates storjshare software $howoften at $global:checktime local time" -RunLevel Highest
-            } else {
+            #if($global:runas) {
+            #     Register-ScheduledTask -Action $action -User $global:username -Password "$global:password" -Trigger $trigger -TaskName "storjshare Auto-Update" -Description "Updates storjshare software $howoften at $global:checktime local time" -RunLevel Highest
+            #} else {
                  Register-ScheduledTask -Action $action -Trigger $trigger -TaskName "storjshare Auto-Update" -Description "Updates storjshare software $howoften at $global:checktime local time" -RunLevel Highest
-            }
+            #}
 
             LogWrite "Scheduled Task Created"
         } else {
