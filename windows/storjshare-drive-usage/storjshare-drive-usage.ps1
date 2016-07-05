@@ -319,6 +319,17 @@ function ErrorOut([string]$message,[int]$code=0) {
     exit $code;
 }
 
+function storjshare_drive_usage_checkver([string]$script_ver) {
+    LogWrite "Checking for Storj Script Version Environment Variable..."
+    $env:STORJSHARE_DRIVE_USAGE_SCRIPT_VER = [System.Environment]::GetEnvironmentVariable("STORJSHARE_DRIVE_USAGE_SCRIPT_VER","Machine")
+    if ($env:STORJSHARE_DRIVE_USAGE_SCRIPT_VER -eq $script_ver) {
+    	LogWrite "STORJSHARE_DRIVE_USAGE_SCRIPT_VER Environment Variable $script_ver already matches, skipping..."
+    } else {
+        Set-ItemProperty -Path 'Registry::HKEY_LOCAL_MACHINE\System\CurrentControlSet\Control\Session Manager\Environment' -Name STORJSHARE_DRIVE_USAGE_SCRIPT_VER -Value $script_ver -ErrorAction SilentlyContinue
+        LogWrite "Storjshare Script Version Environment Variable Added: $script_ver"
+    }
+}
+
 function autoupdate($howoften) {
     if(!($global:noautoupdate)) {
 
@@ -359,6 +370,12 @@ GetStorjshareList $storjshareMonitorFolders
 LogWrite ""
 LogWrite -color Yellow "=============================================="
 LogWrite -color Green "Total Disk Space Used: $global:total"
+LogWrite ""
+LogWrite -color Yellow "=============================================="
+LogWrite ""
+LogWrite -color Cyan "Reviewing Script Registry Version..."
+storjshare_drive_usage_checkver $global:script_version
+LogWrite -color Green "Script Registry Version Completed"
 LogWrite ""
 LogWrite -color Yellow "=============================================="
 LogWrite ""
