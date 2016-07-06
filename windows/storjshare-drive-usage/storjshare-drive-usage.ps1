@@ -1,3 +1,5 @@
+#Requires -Version 3
+#Requires -RunAsAdministrator
 <#
 .SYNOPSIS
   Generates a report on current storjshare drive usage
@@ -51,7 +53,7 @@ param(
 #---------------------------------------------------------[Initialisations]--------------------------------------------------------
 
 $global:total=0
-$global:script_version="1.5"
+$global:script_version="1.6"
 $global:howoften="Daily"
 $global:checktime="3am"
 $global:runas=""
@@ -61,7 +63,7 @@ $global:noautoupdate=""
 
 #----------------------------------------------------------[Declarations]----------------------------------------------------------
 
-$storjshareMonitorFolders = "F:\.storjshare\;G:\.storjshare\;"
+$storjshareMonitorFolders = "F:\.storjshare\;G:\.storjshare\;H:\.storjshare\;"
 $log_path=$env:windir + '\Temp\storj\driveusage'
 $log_file=$log_path + '\drive_usage_stats.log'
 
@@ -252,15 +254,28 @@ function GetFolderSize([string]$folder) {
     $colItems = (Get-ChildItem $folder -recurse | Where-Object {$_.PSIsContainer -eq $True} | Sort-Object)
     foreach ($i in $colItems) {
         $subFolderItems = (Get-ChildItem $i.FullName | Measure-Object -ErrorAction SilentlyContinue -property length -sum)
-        $sum=[math]::Round($subFolderItems.sum / 1KB,0)
-        $global:total+=$sum
+        $sumB=[math]::Round($subFolderItems.sum,0)
+        $sumKB=[math]::Round($subFolderItems.sum / 1KB,0)
+        $sumMB=[math]::Round($subFolderItems.sum / 1MB,0)
+        $sumGB=[math]::Round($subFolderItems.sum / 1GB,0)
+        $sumTB=[math]::Round($subFolderItems.sum / 1TB,0)
+        $global:total+=$sumKB
 
-        $results=ConvertSize $sum
+        $resultssum=ConvertSize $sumKB
 
-        $result=$i.FullName + " -- " + "{0:N2}" -f ($results)
+        $driveLetter=(Get-Item $i.FullName).PSDrive.Name
+        $driveFreeSpace = Get-PSDrive -Name $driveLetter
+        $freeB=[math]::Round($driveFreeSpace.Free,0)
+        $freeKB=[math]::Round($driveFreeSpace.Free / 1KB,0)
+        $freeMB=[math]::Round($driveFreeSpace.Free / 1MB,0)
+        $freeGB=[math]::Round($driveFreeSpace.Free / 1GB,0)
+        $freeTB=[math]::Round($driveFreeSpace.Free / 1TB,0)
+
+        $resultsfree=ConvertSize $freeKB
+
+        $result=$i.FullName + " -- " + "{0:N2}" -f ($resultssum) + " -- $resultsfree"
         LogWrite "$result"
-
-        UsageWrite """folderLocation"":""$folder$i"",""farmFolderSizeKB"":$sum"
+        UsageWrite """folderLocation"":""$folder$i"",""farmFolderSizeB"":$sumB,""farmFolderSizeKB"":$sumKB,""farmFolderSizeMB"":$sumMB,""farmFolderSizeGB"":$sumGB,""farmFolderSizeTB"":$sumTB,""freeSpaceB"":$freeB,""freeSpaceKB"":$freeKB,""freeSpaceMB"":$freeMB,""freeSpaceGB"":$freeGB,""freeSpaceTB"":$freeTB"
     }
 } 
 
