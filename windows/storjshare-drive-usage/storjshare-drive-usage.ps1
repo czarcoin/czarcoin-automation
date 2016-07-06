@@ -51,7 +51,7 @@ param(
 #---------------------------------------------------------[Initialisations]--------------------------------------------------------
 
 $global:total=0
-$global:script_version="1.4"
+$global:script_version="1.5"
 $global:howoften="Daily"
 $global:checktime="3am"
 $global:runas=""
@@ -61,7 +61,7 @@ $global:noautoupdate=""
 
 #----------------------------------------------------------[Declarations]----------------------------------------------------------
 
-$storjshareMonitorFolders = "F:\.storjshare\;"
+$storjshareMonitorFolders = "F:\.storjshare\;G:\.storjshare\;"
 $log_path=$env:windir + '\Temp\storj\driveusage'
 $log_file=$log_path + '\drive_usage_stats.log'
 
@@ -73,6 +73,8 @@ $storjshare_cli_install_log_file=$storjshare_cli_install_log_path + '\automate_d
 
 $global:appdata=$env:appdata + '\' # (Default: %APPDATA%\) - runas overwrites this variable
 $global:npm_path='' + $global:appdata + "npm\"
+
+$limit = (Get-Date).AddDays(-15)
 
 $automated_script_path=Split-Path -parent $PSCommandPath
 $automated_script_path=$automated_script_path + '\'
@@ -99,6 +101,9 @@ function handleParameters() {
     if(!(Test-Path -pathType container $save_dir)) {
 		ErrorOut "Save Directory $save_dir failed to create, try it manually..."
 	}
+
+    # Delete files older than the $limit.
+    Get-ChildItem -Path $log_path -Recurse -Force | Where-Object { !$_.PSIsContainer -and $_.CreationTime -lt $limit } | Remove-Item -Force
 
     #checks the silent parameter and if true, writes to log instead of console, also ignores pausing
     if($silent) {
@@ -267,7 +272,8 @@ function GetStorjshareList([string]$folders) {
     }
 
     $global:total=ConvertSize $global:total
-    UsageWrite """Total Usage"":""$global:total"""
+    #UsageWrite """Total Usage"":""$global:total"""
+    LogWrite """Total Usage"":""$global:total"""
 }
 
 Function UsageWrite([string]$logstring) {
