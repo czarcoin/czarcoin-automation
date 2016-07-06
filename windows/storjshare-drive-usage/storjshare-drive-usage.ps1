@@ -290,7 +290,7 @@ function GetFolderSize([string]$folder) {
 
         $result=$i.FullName + " -- " + "{0:N2}" -f ($resultssum) + " -- $resultsfree"
         LogWrite "$result"
-        UsageWrite """folderLocation"":""$folder$i"",""farmFolderSizeB"":$sumB,""farmFolderSizeKB"":$sumKB,""farmFolderSizeMB"":$sumMB,""farmFolderSizeGB"":$sumGB,""farmFolderSizeTB"":$sumTB,""freeSpaceB"":$freeB,""freeSpaceKB"":$freeKB,""freeSpaceMB"":$freeMB,""freeSpaceGB"":$freeGB,""freeSpaceTB"":$freeTB"
+        UsageWrite """folderLocation"":""$folder\$i"",""farmFolderSizeB"":$sumB,""farmFolderSizeKB"":$sumKB,""farmFolderSizeMB"":$sumMB,""farmFolderSizeGB"":$sumGB,""farmFolderSizeTB"":$sumTB,""freeSpaceB"":$freeB,""freeSpaceKB"":$freeKB,""freeSpaceMB"":$freeMB,""freeSpaceGB"":$freeGB,""freeSpaceTB"":$freeTB"
     }
 } 
 
