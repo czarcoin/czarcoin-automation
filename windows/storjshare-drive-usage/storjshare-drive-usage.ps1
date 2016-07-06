@@ -12,7 +12,7 @@
   The smallest amount reported is KB and the largest is PB
 
   Example:
-    $storjshareFolders = "E:\storjshare;"
+    $storjshareFolders = "C:\storjshare;"
     $storjshareFolders += "F:\storjshare;"
 
 .INPUTS
@@ -23,6 +23,7 @@
    -noautoupdate
         -howoften - [optional] Days to check for updates (Default: Every day)
         -checktime - [optional] Time to check for updates (Default: 3:00am Local Time)
+   -datadir "C:\.storjshare;F:\.storjshare;" -- passes thru a list of directories
 
 .OUTPUTS
   Report of each folder's usage and total usage.
@@ -33,6 +34,9 @@
 param(
     [Parameter(Mandatory=$false)]
     [SWITCH]$silent,
+
+    [Parameter(Mandatory=$false,ValueFromPipelineByPropertyName=$true)]
+    [STRING]$datadir,
 
     [Parameter(Mandatory=$false)]
     [SWITCH]$runas,
@@ -63,7 +67,7 @@ $global:noautoupdate=""
 
 #----------------------------------------------------------[Declarations]----------------------------------------------------------
 
-$storjshareMonitorFolders = "F:\.storjshare\;G:\.storjshare\;H:\.storjshare\;"
+$global:datadir = "C:\.storjshare;"
 $log_path=$env:windir + '\Temp\storj\driveusage'
 $log_file=$log_path + '\drive_usage_stats.log'
 
@@ -107,6 +111,12 @@ function handleParameters() {
     # Delete files older than the $limit.
     Get-ChildItem -Path $log_path -Recurse -Force | Where-Object { !$_.PSIsContainer -and $_.CreationTime -lt $limit } | Remove-Item -Force
 
+    if($datadir) {
+        $global:datadir=$datadir
+    } else {
+        $global:datadir=$global:datadir
+    }
+
     #checks the silent parameter and if true, writes to log instead of console, also ignores pausing
     if($silent) {
         LogWrite "Logging to file $storjshare_cli_install_log_file"
@@ -140,7 +150,6 @@ function handleParameters() {
 
         $global:npm_path='' + $global:appdata + "npm\"
 
-        $global:datadir=$global:user_profile + ".storjshare\"
         LogWrite "Using Service Account: $global:username"
         LogWrite "Granting $global:username Logon As A Service Right"
         Grant-LogOnAsService $global:username
@@ -357,7 +366,7 @@ function autoupdate($howoften) {
         Copy-Item "${automated_script_path}storjshare-drive-usage.ps1" "$global:npm_path" -force -ErrorAction SilentlyContinue
         LogWrite "Script file copied to $global:npm_path"
 
-        $Arguments="-NoProfile -NoLogo -Noninteractive -WindowStyle Hidden -ExecutionPolicy Bypass ""${global:npm_path}storjshare-drive-usage.ps1"" -silent -noautoupdate"
+        $Arguments="-NoProfile -NoLogo -Noninteractive -WindowStyle Hidden -ExecutionPolicy Bypass ""${global:npm_path}storjshare-drive-usage.ps1"" -silent -noautoupdate -datadir ""$global:datadir"""
         $action = New-ScheduledTaskAction -Execute 'Powershell.exe' -Argument $Arguments
         $repeat = (New-TimeSpan -Minutes 10)
         $trigger = New-JobTrigger -Once -At (Get-Date).Date -RepeatIndefinitely -RepetitionInterval $repeat
@@ -387,7 +396,7 @@ LogWrite -color Yellow "=============================================="
 LogWrite ""
 LogWrite -color Cyan "Checking Disk Space For Each Folder..."
 LogWrite ""
-GetStorjshareList $storjshareMonitorFolders
+GetStorjshareList $global:datadir
 LogWrite ""
 LogWrite -color Yellow "=============================================="
 LogWrite -color Green "Total Disk Space Used: $global:total"
