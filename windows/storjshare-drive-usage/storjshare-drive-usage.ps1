@@ -12,8 +12,8 @@
   The smallest amount reported is KB and the largest is PB
 
   Example:
-    $storjshareFolders = "C:\storjshare;"
-    $storjshareFolders += "F:\storjshare;"
+    $storjshareFolders = "C:\storjshare,"
+    $storjshareFolders += "F:\storjshare,"
 
 .INPUTS
   -silent - [optional] this will write everything to a log file and prevent the script from running pause commands.
@@ -67,9 +67,11 @@ $global:noautoupdate=""
 
 #----------------------------------------------------------[Declarations]----------------------------------------------------------
 
-$global:datadir = "C:\.storjshare;"
+$global:datadir = "C:\.storjshare,"
 $log_path=$env:windir + '\Temp\storj\driveusage'
 $log_file=$log_path + '\drive_usage_stats.log'
+
+$folderDelm=","
 
 $windows_env=$env:windir
 $work_directory='' + $windows_env + '\Temp\storj'
@@ -112,9 +114,9 @@ function handleParameters() {
     Get-ChildItem -Path $log_path -Recurse -Force | Where-Object { !$_.PSIsContainer -and $_.CreationTime -lt $limit } | Remove-Item -Force
 
     if($datadir) {
-        $global:datadir=$datadir
+        $global:datadir="$datadir"
     } else {
-        $global:datadir=$global:datadir
+        $global:datadir="$global:datadir"
     }
 
     #checks the silent parameter and if true, writes to log instead of console, also ignores pausing
@@ -289,7 +291,7 @@ function GetFolderSize([string]$folder) {
 } 
 
 function GetStorjshareList([string]$folders) {
-    foreach ($i in $folders.Split(";")) {
+    foreach ($i in $folders.Split("$folderDelm")) {
         if($i) {
           GetFolderSize $i
         }
