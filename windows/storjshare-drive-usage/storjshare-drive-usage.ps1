@@ -270,10 +270,10 @@ function GetFolderSize([string]$folder) {
     foreach ($i in $colItems) {
         $subFolderItems = (Get-ChildItem $i.FullName | Measure-Object -ErrorAction SilentlyContinue -property length -sum)
         $sumB=[math]::Round($subFolderItems.sum,0)
-        $sumKB=[math]::Round($subFolderItems.sum / 1KB,0)
-        $sumMB=[math]::Round($subFolderItems.sum / 1MB,0)
-        $sumGB=[math]::Round($subFolderItems.sum / 1GB,0)
-        $sumTB=[math]::Round($subFolderItems.sum / 1TB,0)
+        $sumKB=[math]::Round($subFolderItems.sum / 1KB,2)
+        $sumMB=[math]::Round($subFolderItems.sum / 1MB,2)
+        $sumGB=[math]::Round($subFolderItems.sum / 1GB,2)
+        $sumTB=[math]::Round($subFolderItems.sum / 1TB,2)
         $global:total+=$sumKB
 
         $resultssum=ConvertSize $sumKB
@@ -281,10 +281,10 @@ function GetFolderSize([string]$folder) {
         $driveLetter=(Get-Item $i.FullName).PSDrive.Name
         $driveFreeSpace = Get-PSDrive -Name $driveLetter
         $freeB=[math]::Round($driveFreeSpace.Free,0)
-        $freeKB=[math]::Round($driveFreeSpace.Free / 1KB,0)
-        $freeMB=[math]::Round($driveFreeSpace.Free / 1MB,0)
-        $freeGB=[math]::Round($driveFreeSpace.Free / 1GB,0)
-        $freeTB=[math]::Round($driveFreeSpace.Free / 1TB,0)
+        $freeKB=[math]::Round($driveFreeSpace.Free / 1KB,2)
+        $freeMB=[math]::Round($driveFreeSpace.Free / 1MB,2)
+        $freeGB=[math]::Round($driveFreeSpace.Free / 1GB,2)
+        $freeTB=[math]::Round($driveFreeSpace.Free / 1TB,2)
 
         $resultsfree=ConvertSize $freeKB
 
