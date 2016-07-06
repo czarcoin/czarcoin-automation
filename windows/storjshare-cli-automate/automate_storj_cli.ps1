@@ -154,7 +154,7 @@ param(
 
 #---------------------------------------------------------[Initialisations]--------------------------------------------------------
 
-$global:script_version="3.7" # Script version
+$global:script_version="3.8" # Script version
 $global:reboot_needed=""
 $global:noupnp=""
 $global:installsvc="true"
@@ -237,10 +237,6 @@ function handleParameters() {
     if(!(Test-Path -pathType container $storjshare_cli_install_log_path)) {
 		ErrorOut "Log Directory $storjshare_cli_install_log_path failed to create, try it manually..."
 	}
-
-    if(Test-Path $storjshare_cli_install_log_file) {
-        Remove-Item $storjshare_cli_install_log_file
-    }
 
     if(!(Test-Path -pathType container $storjshare_cli_log_path)) {
         New-Item $storjshare_cli_log_path -type directory -force | Out-Null
@@ -932,7 +928,11 @@ function storjshare-cliCheck() {
 
         if(Test-Path $global:storjshare_cli_log) {
             LogWrite "Removing Log file: $global:storjshare_cli_log"
-            Remove-Item $global:storjshare_cli_log
+        }
+
+        if(Test-Path $storjshare_cli_log_path) {
+            LogWrite "Removing Logs files $storjshare_cli_log_path"
+            Remove-Item "$storjshare_cli_log_path\*" -force
         }
 
         LogWrite -color Cyan "Performing storjshare-cli Update..."
