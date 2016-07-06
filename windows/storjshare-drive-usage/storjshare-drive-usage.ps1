@@ -7,13 +7,12 @@
   Generates a report on current storjshare drive usage
 
   The declarations section can be modified to the location of each storjshare instance.
-  Each location should end with a semi-colon (;).
 
   The smallest amount reported is KB and the largest is PB
 
   Example:
     $storjshareFolders = "C:\storjshare,"
-    $storjshareFolders += "F:\storjshare,"
+    $storjshareFolders += "F:\storjshare"
 
 .INPUTS
   -silent - [optional] this will write everything to a log file and prevent the script from running pause commands.
@@ -36,7 +35,7 @@ param(
     [SWITCH]$silent,
 
     [Parameter(Mandatory=$false,ValueFromPipelineByPropertyName=$true)]
-    [STRING]$datadir,
+    [ARRAY]$datadir,
 
     [Parameter(Mandatory=$false)]
     [SWITCH]$runas,
@@ -67,7 +66,7 @@ $global:noautoupdate=""
 
 #----------------------------------------------------------[Declarations]----------------------------------------------------------
 
-$global:datadir = "C:\.storjshare,"
+$global:datadir = "C:\.storjshare"
 $log_path=$env:windir + '\Temp\storj\driveusage'
 $log_file=$log_path + '\drive_usage_stats.log'
 
@@ -114,7 +113,12 @@ function handleParameters() {
     Get-ChildItem -Path $log_path -Recurse -Force | Where-Object { !$_.PSIsContainer -and $_.CreationTime -lt $limit } | Remove-Item -Force
 
     if($datadir) {
-        $global:datadir="$datadir"
+        $global:datadir=""
+        foreach ($folder in $datadir) {
+            $global:datadir+="$folder" + ","
+        }
+
+        $global:datadir=$global:datadir.Substring(0,$global:datadir.Length-1)
     } else {
         $global:datadir="$global:datadir"
     }
