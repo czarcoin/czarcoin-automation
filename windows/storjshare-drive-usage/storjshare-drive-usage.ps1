@@ -56,13 +56,23 @@ param(
 #---------------------------------------------------------[Initialisations]--------------------------------------------------------
 
 $global:total=0
-$global:script_version="1.6"
+$global:script_version="1.7"
 $global:howoften="Daily"
 $global:checktime="3am"
 $global:runas=""
 $global:username=""
 $global:password=""
 $global:noautoupdate=""
+$global:totalSumB=0
+$global:totalSumKB=0
+$global:totalSumMB=0
+$global:totalSumGB=0
+$global:totalSumTB=0
+$global:totalFreeB=0
+$global:totalFreeKB=0
+$global:totalFreeMB=0
+$global:totalFreeGB=0
+$global:totalFreeTB=0
 
 #----------------------------------------------------------[Declarations]----------------------------------------------------------
 
@@ -81,7 +91,7 @@ $storjshare_cli_install_log_file=$storjshare_cli_install_log_path + '\automate_d
 $global:appdata=$env:appdata + '\' # (Default: %APPDATA%\) - runas overwrites this variable
 $global:npm_path='' + $global:appdata + "npm\"
 
-$limit = (Get-Date).AddDays(-15)
+$limit = (Get-Date).AddDays(-1)
 
 $automated_script_path=Split-Path -parent $PSCommandPath
 $automated_script_path=$automated_script_path + '\'
@@ -265,7 +275,6 @@ function ConvertSize($size) {
 }
 
 function GetFolderSize([string]$folder) {
-    $results=""
     $colItems = (Get-ChildItem $folder -recurse | Where-Object {$_.PSIsContainer -eq $True} | Sort-Object)
     foreach ($i in $colItems) {
         $subFolderItems = (Get-ChildItem $i.FullName | Measure-Object -ErrorAction SilentlyContinue -property length -sum)
@@ -274,9 +283,14 @@ function GetFolderSize([string]$folder) {
         $sumMB=[math]::Round($subFolderItems.sum / 1MB,2)
         $sumGB=[math]::Round($subFolderItems.sum / 1GB,2)
         $sumTB=[math]::Round($subFolderItems.sum / 1TB,2)
-        $global:total+=$sumKB
-
         $resultssum=ConvertSize $sumKB
+
+        $global:totalSumB+=$sumB
+        $global:totalSumKB+=$sumKB
+        $global:totalSumMB+=$sumMB
+        $global:totalSumGB+=$sumGB
+        $global:totalSumTB+=$sumTB
+
 
         $driveLetter=(Get-Item $i.FullName).PSDrive.Name
         $driveFreeSpace = Get-PSDrive -Name $driveLetter
@@ -285,8 +299,13 @@ function GetFolderSize([string]$folder) {
         $freeMB=[math]::Round($driveFreeSpace.Free / 1MB,2)
         $freeGB=[math]::Round($driveFreeSpace.Free / 1GB,2)
         $freeTB=[math]::Round($driveFreeSpace.Free / 1TB,2)
-
         $resultsfree=ConvertSize $freeKB
+
+        $global:totalFreeB+=$freeB
+        $global:totalFreeKB+=$freeKB
+        $global:totalFreeMB+=$freeMB
+        $global:totalFreeGB+=$freeGB
+        $global:totalFreeTB+=$freeTB
 
         $result=$i.FullName + " -- " + "{0:N2}" -f ($resultssum) + " -- $resultsfree"
         LogWrite "$result"
@@ -301,9 +320,12 @@ function GetStorjshareList([string]$folders) {
         }
     }
 
-    $global:total=ConvertSize $global:total
-    #UsageWrite """Total Usage"":""$global:total"""
-    LogWrite """Total Usage"":""$global:total"""
+    $resultssum=ConvertSize $global:totalSumKB
+    $resultsfree=ConvertSize $global:totalFreeKB
+
+    $result="Total" + " -- " + "{0:N2}" -f ($resultssum) + " -- $resultsfree"
+    LogWrite "$result"
+    UsageWrite """folderLocation"":""Total"",""farmFolderSizeB"":$global:totalSumB,""farmFolderSizeKB"":$global:totalSumKB,""farmFolderSizeMB"":$global:totalSumMB,""farmFolderSizeGB"":$global:totalSumGB,""farmFolderSizeTB"":$global:totalSumTB,""freeSpaceB"":$global:totalFreeB,""freeSpaceKB"":$global:totalFreeKB,""freeSpaceMB"":$global:totalFreeMB,""freeSpaceGB"":$global:totalFreeGB,""freeSpaceTB"":$global:totalFreeTB"
 }
 
 Function UsageWrite([string]$logstring) {
