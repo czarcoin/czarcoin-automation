@@ -51,6 +51,8 @@
     -uri [uri of known good seed] - [optional] URI of a known good seed (Default: [blank])
     -loglvl [integer 1-4] - [optional] Logging Level of storjshare (Default: 3)
     -amt [number with unit] - [optional] Amount of space allowed to consume (Default: 2GB)
+    -concurrency [integer] - [optional] Modifying this value can cause issues with getting contracts!
+                             [warn]   See: http://docs.storj.io/docs/storjshare-troubleshooting-guide#rpc-call-timed-out
     -payaddr [storj addr] - [optional] Payment address STORJ wallet (Default: [blank; free])
     -tunconns [integer] - [optional] Number of allowed tunnel connections (Default: 3)
     -tunsvcport [port number] - [optional] Port number of Tunnel Service (Default: 0; random)
@@ -122,6 +124,9 @@ param(
     [STRING]$amt,
 
     [Parameter(Mandatory=$false,ValueFromPipelineByPropertyName=$true)]
+    [STRING]$concurrency,
+
+    [Parameter(Mandatory=$false,ValueFromPipelineByPropertyName=$true)]
     [STRING]$payaddr,
 
     [Parameter(Mandatory=$false,ValueFromPipelineByPropertyName=$true)]
@@ -154,7 +159,7 @@ param(
 
 #---------------------------------------------------------[Initialisations]--------------------------------------------------------
 
-$global:script_version="3.8" # Script version
+$global:script_version="3.9" # Script version
 $global:reboot_needed=""
 $global:noupnp=""
 $global:installsvc="true"
@@ -181,6 +186,7 @@ $global:nat="true" #Default true for storjshare
 $global:uri="" #Default blank for storjshare
 $global:loglvl="3" #Default 3 for storjshare
 $global:amt="2GB" #default: 2GB for storjshare
+$global:concurrency="3" #default: 3
 $global:payaddr="" #Default none; aka farming for free; for storjshare
 $global:tunconns="3" #Default 3
 $global:tunsvcport="0" #Default 0; random
@@ -404,6 +410,12 @@ function handleParameters() {
                 $global:amt="$global:amt"
             } else {
                 $global:amt="$amt"
+            }
+
+            if(!($concurrency)) {
+                $global:concurrency="$global:concurrency"
+            } else {
+                $global:concurrency="$concurrency"
             }
 
             if(!($uri)) {
@@ -1502,6 +1514,9 @@ function setup-storjshare() {
 
                     #Amount of storage to use (default 2GB)
                     storjshare-enterdata -processid $processstorjshare -command "$global:amt"
+
+                    #Concurrency (default 3)
+                    storjshare-enterdata -processid $processstorjshare -command "$global:concurrency"
 
                     #Payment Address  (default blank)
                     storjshare-enterdata -processid $processstorjshare -command "$global:payaddr"
