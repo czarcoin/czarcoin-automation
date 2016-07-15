@@ -37,6 +37,7 @@ This default configuration of the script automates the following functions:
 Log files are stored in `%TEMP%\storj\cli`
 
 ### Inputs
+```
   -silent - [optional] this will write everything to a log file and prevent the script from running pause commands.
   -noupnp - [optional] Disables UPNP
   -installsvc - [optional] Installs storjshare as a service (see the config section in the script to customize)
@@ -72,6 +73,7 @@ Log files are stored in `%TEMP%\storj\cli`
         -howoften - [optional] Days to check for updates (Default: Every day)
         -checktime - [optional] Time to check for updates (Default: 3:00am Local Time)
    -update - [optional] Performs an update only function and skips the rest
+```
 
 ### Advanced Functionality:
 
