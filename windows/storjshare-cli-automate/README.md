@@ -37,18 +37,43 @@ This default configuration of the script automates the following functions:
 Log files are stored in `%TEMP%\storj\cli`
 
 ### Inputs
-  -silent - [optional] this will write everything to a log file and prevent the script from running pause commands.  
-  -noupnp - [optional] Disables UPNP  
-  -installsvc - [optional] Installs storjshare as a service (see the config section in the script to customize)  
-    -svcname [name] - [optional] Installs the service with this name - storjshare-cli is default  
-    -datadir [directory] - [required] Data Directory of Storjshare  
-    -password [password] - [required] Password for Storjshare Directory  
-  -removesvc - [optional] Removes storjshare as a service (see the config section in the script to customize)  
-    -svcname [name] - required] Removes the service with this name (*becareful*)  
-  -runas - [optional] Runs the script as a service account  
-    -username username [required] Username of the account  
-    -password 'password' [required] Password of the account  
-  -autoreboot [optional] Automatically reboots if required  
+```
+  -silent - [optional] this will write everything to a log file and prevent the script from running pause commands.
+  -noupnp - [optional] Disables UPNP
+  -installsvc - [optional] Installs storjshare as a service (see the config section in the script to customize)
+    -svcname [name] - [optional] Installs the service with this name - storjshare-cli is default
+    -datadir [directory] - [required] Data Directory of Storjshare
+    -storjpassword [password] - [required] Password for Storjshare Directory
+  -removesvc - [optional] Removes storjshare as a service (see the config section in the script to customize)
+    -svcname [name] - required] Removes the service with this name (*becareful*)
+  -runas - [optional] Runs the script as a service account
+    -username username [required] Username of the account
+    -password 'password' [required] Password of the account
+  -autoreboot [optional] Automatically reboots if required
+  -autosetup
+    -datadir [directory] - [optional] Data Directory of Storjshare
+    -storjpassword [password] - [required] Password for Storjshare Directory
+    -publicaddr [ip or dns] - [optional] Public IP or DNS of storjshare (Default: 127.0.0.1)
+        *Note use [THIS] to use the the hostname of the computer
+        For example: [THIS] replaces with hostname
+        For example: [THIS].domain.com replaces with hostname.domain.com
+    -svcport [port number] - [optional] TCP Port Number of storjshare Service (Default: 4000)
+    -nat [true | false] - [optional] Turn on or Off Nat (UPNP) [Default: true]
+    -uri [uri of known good seed] - [optional] URI of a known good seed (Default: [blank])
+    -loglvl [integer 1-4] - [optional] Logging Level of storjshare (Default: 3)
+    -amt [number with unit] - [optional] Amount of space allowed to consume (Default: 2GB)
+    -concurrency [integer] - [optional] Modifying this value can cause issues with getting contracts!
+                             [warn]   See: http://docs.storj.io/docs/storjshare-troubleshooting-guide#rpc-call-timed-out
+    -payaddr [storj addr] - [optional] Payment address STORJ wallet (Default: [blank; free])
+    -tunconns [integer] - [optional] Number of allowed tunnel connections (Default: 3)
+    -tunsvcport [port number] - [optional] Port number of Tunnel Service (Default: 0; random)
+    -tunstart [port number] - [optional] Starting port number (Default: 0; random)
+    -tunend [port number] - [optional] Ending port number (Default: 0; random)
+   -noautoupdate
+        -howoften - [optional] Days to check for updates (Default: Every day)
+        -checktime - [optional] Time to check for updates (Default: 3:00am Local Time)
+   -update - [optional] Performs an update only function and skips the rest
+```
 
 ### Advanced Functionality:
 
