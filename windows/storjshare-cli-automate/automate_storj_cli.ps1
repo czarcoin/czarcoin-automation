@@ -159,7 +159,7 @@ param(
 
 #---------------------------------------------------------[Initialisations]--------------------------------------------------------
 
-$global:script_version="3.9" # Script version
+$global:script_version="4.0" # Script version
 $global:reboot_needed=""
 $global:noupnp=""
 $global:installsvc="true"
@@ -227,7 +227,7 @@ $error_invalid_parameter=87 #this is failiure, invalid parameters referenced
 $error_install_failure=1603 #this is failure, A fatal error occured during installation (default error)
 $error_success_reboot_required=3010  #this is success, but requests for reboot
 
-$automatic_restart_timeout=30  #in seconds Default: 30
+$automatic_restart_timeout=10  #in seconds Default: 10
 
 $automated_script_path=Split-Path -parent $PSCommandPath
 $automated_script_path=$automated_script_path + '\'
@@ -336,17 +336,6 @@ function handleParameters() {
             if(!($storjpassword)) {
                 if($silent) {
                     ErrorOut -code $global:error_invalid_parameter "ERROR: Service Password not specified"
-                } else {
-                    if(!(Test-Path -pathType container $global:datadir)) {
-                        $global:storjpassword = GET-RANDOM
-                        LogWrite "We generated a password for storjshare since one was not provided"
-                        LogWrite "Your Password Is:"
-                        LogWrite -Color Cyan "$global:storjpassword"
-                        LogWrite -Color Red "Write this down; you will need it to type into storjshare when asked!!!!"
-                        Sleep -s 2
-                        Write-Host "Press any key to continue ..."
-                        $x = $host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
-                    }
                 }
             } else {
                 $global:storjpassword="$storjpassword"
@@ -934,9 +923,9 @@ function storjshare-cliCheck() {
 
         LogWrite "Stopping $global:svcname service (if applicable)"
 
-        Stop-Service $global:svcname -ErrorAction SilentlyContinue
+        Stop-Service $global:svcname -ErrorAction SilentlyContinue | Out-Null
         $services=Get-Service -Name *storjshare-cli*
-        $services | ForEach-Object{Stop-Service $_.name -ErrorAction SilentlyContinue}
+        $services | ForEach-Object{Stop-Service $_.name -ErrorAction SilentlyContinue | Out-Null}
 
         if(Test-Path $global:storjshare_cli_log) {
             LogWrite "Removing Log file: $global:storjshare_cli_log"
@@ -1063,7 +1052,11 @@ function RemoveLowRiskFiles() {
 function InstallEXE([string]$installer, [string]$Arguments) {
 	Unblock-File $installer
 	AddLowRiskFiles
-	Start-Process "`"$installer`"" -ArgumentList $Arguments -Wait -NoNewWindow
+    if($silent) {
+	    Start-Process "`"$installer`"" -ArgumentList $Arguments -Wait -NoNewWindow
+    } else {
+        Start-Process "`"$installer`"" -ArgumentList $Arguments -Wait
+    }
 	RemoveLowRiskFiles
 }
 
@@ -1075,7 +1068,11 @@ function InstallMSI([string]$installer) {
 	$Arguments += "/passive"
 	$Arguments += "/norestart"
 
-	Start-Process "msiexec.exe" -ArgumentList $Arguments -Wait -NoNewWindow
+    if($silent) {
+	    Start-Process "msiexec.exe" -ArgumentList $Arguments -Wait -NoNewWindow
+    } else {
+        Start-Process "msiexec.exe" -ArgumentList $Arguments -Wait
+    }
 }
 
 function UseNPM([string]$Arguments) {
@@ -1125,16 +1122,16 @@ function UseNPM([string]$Arguments) {
 
 function CheckRebootNeeded() {
 	if($global:reboot_needed) {
-        if((!$silent) -or (!$global:autoreboot)) {
-            LogWrite -color Red "=============================================="
-            LogWrite -color Red "~~~PLEASE REBOOT BEFORE PROCEEDING~~~"
-            LogWrite -color White "After the reboot, re-launch this script to complete the installation"
-            ErrorOut -code $error_success_reboot_required "~~~PLEASE REBOOT BEFORE PROCEEDING~~~"
-        } else {
+        if($global:autoreboot) {
             LogWrite -color Red "=============================================="
             LogWrite -color Red "Initiating Auto-Reboot in $automatic_restart_timeout seconds"
             Restart-Computer -Wait $automatic_restart_timeout
             ErrorOut -code $error_success_reboot_required "~~~Automatically Rebooting in $automatic_restart_timeout seconds~~~"
+        } else {
+            LogWrite -color Red "=============================================="
+            LogWrite -color Red "~~~PLEASE REBOOT BEFORE PROCEEDING~~~"
+            LogWrite -color White "After the reboot, re-launch this script to complete the installation"
+            ErrorOut -code $error_success_reboot_required "~~~PLEASE REBOOT BEFORE PROCEEDING~~~"
         } 
     } else {
         LogWrite -color Green "No Reboot Needed, continuing on with script"
@@ -1186,7 +1183,15 @@ function EnableUPNP() {
 	$results=SetUPNP "Yes"
 
     if($results -eq 0) {
-        ErrorOut "Enabling UPNP failed to execute...try manually enabling UPNP..."
+        LogWrite "Attempting Enabling UPNP Old Fashioned Way"
+        $results=SetUPNP "Yes" "Old"
+
+        if($results -eq 0)
+        {
+            ErrorOut "Enabling UPNP failed to execute...try manually enabling UPNP..."
+        } else {
+            LogWrite -color Green "UPNP has been successfully enabled"
+        }
     } else {
         LogWrite -color Green "UPNP has been successfully enabled"
     }
@@ -1203,13 +1208,22 @@ function DisableUPNP() {
 	$results=SetUPNP "No"
 
     if($results -eq 0) {
+        LogWrite "Attempting Enabling UPNP Old Fashioned Way"
+        $results=SetUPNP "No" "Old"
+
+        if($results -eq 0)
+        {
+            ErrorOut "Enabling UPNP failed to execute...try manually enabling UPNP..."
+        } else {
+            LogWrite -color Green "UPNP has been successfully enabled"
+        }
         ErrorOut "Disabling UPNP failed to execute...try manually disabling UPNP..."
     } else {
         LogWrite -color Green "UPNP has been successfully disabled"
     }
 }
 
-function SetUPNP([string]$upnp_set) {
+function SetUPNP([string]$upnp_set, [string]$Old) {
 	$filename = 'upnp_output.log';
 	$save_path = '' + $storjshare_cli_install_log_path + '\' + $filename;
 
@@ -1217,8 +1231,23 @@ function SetUPNP([string]$upnp_set) {
 	    ErrorOut "Log directory $storjshare_cli_install_log_path does not exist";
 	}
 	
-    $Arguments="advfirewall firewall set rule group=`"Network Discovery`" new enable=$($upnp_set)"
-    $proc = Start-Process "netsh" -ArgumentList $Arguments -RedirectStandardOutput "$save_path" -Wait -NoNewWindow
+    if($Old) {
+        if($upnp_set -eq "Yes") {
+            $upnp_set_result="enable"
+        } else {
+            $upnp_set_result="disable"
+        }
+
+        $Arguments="firewall set service type=upnp mode=$upnp_set_result"
+    } else {
+        $Arguments="advfirewall firewall set rule group=`"Network Discovery`" new enable=$($upnp_set)"
+    }
+
+    if($silent) {
+        $proc = Start-Process "netsh" -ArgumentList $Arguments -RedirectStandardOutput "$save_path" -Wait -NoNewWindow
+    } else {
+        $proc = Start-Process "netsh" -ArgumentList $Arguments -RedirectStandardOutput "$save_path" -Wait
+    }
 
     if(!(Test-Path $save_path)) {
         ErrorOut "netsh command $Arguments failed to execute...try manually running it..."
@@ -1280,7 +1309,11 @@ function UseNSSM([string]$Arguments) {
 	    ErrorOut "Save directory $storjshare_cli_install_log_path does not exist";
 	}
 	
-    $proc = Start-Process "nssm" -ArgumentList $Arguments -RedirectStandardOutput "$save_path" -Wait -NoNewWindow
+    if($silent) {
+        $proc = Start-Process "nssm" -ArgumentList $Arguments -RedirectStandardOutput "$save_path" -Wait -NoNewWindow
+    } else {
+        $proc = Start-Process "nssm" -ArgumentList $Arguments -RedirectStandardOutput "$save_path" -Wait
+    }
 
     if(!(Test-Path $save_path)) {
         ErrorOut "nssm command $Arguments failed to execute..."
@@ -1370,6 +1403,11 @@ function nssmCheck([string]$version) {
 	                    ErrorOut "storjshare-cli log directory $storjshare_cli_log_path does not exist, you may want to setup storjshare-cli first.";
 	                }
 
+                    if(!$global:storjpassword) {
+                        $pass = Read-Host 'Enter the password for storjshare-cli - Press Enter When Done' -AsSecureString
+                        $global:storjpassword=[Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($pass))
+                    }
+
                     LogWrite "Installing service $global:svcname"
                     $Arguments="install $global:svcname $storjshare_bin start --datadir $global:datadir --password $global:storjpassword >> $global:storjshare_cli_log"
                     $results=UseNSSM $Arguments
@@ -1405,7 +1443,12 @@ function GetUserEnvironment([string]$env_var) {
 	}
 
     $Arguments="/c ECHO $env_var"
-    $proc = Start-Process "cmd.exe" -Credential $global:credential -Workingdirectory "$env:windir\System32" -ArgumentList $Arguments -RedirectStandardOutput "$save_path" -Wait -NoNewWindow
+
+    if($silent) {
+        $proc = Start-Process "cmd.exe" -Credential $global:credential -Workingdirectory "$env:windir\System32" -ArgumentList $Arguments -RedirectStandardOutput "$save_path" -Wait -NoNewWindow
+    } else {
+        $proc = Start-Process "cmd.exe" -Credential $global:credential -Workingdirectory "$env:windir\System32" -ArgumentList $Arguments -RedirectStandardOutput "$save_path" -Wait
+    }
 
     if(!(Test-Path $save_path)) {
         ErrorOut "cmd command $Arguments failed to execute...try manually running it..."
@@ -1604,14 +1647,9 @@ function autoupdate($howoften) {
             $Arguments="-NoProfile -NoLogo -Noninteractive -WindowStyle Hidden -ExecutionPolicy Bypass ""${global:npm_path}automate_storj_cli.ps1"" -silent -update"
             $action = New-ScheduledTaskAction -Execute 'Powershell.exe' -Argument $Arguments
             $trigger =  New-ScheduledTaskTrigger -Daily -At $global:checktime
-            #can use -Credential as needed
 
-            #if($global:runas) {
-            #     Register-ScheduledTask -Action $action -User $global:username -Password "$global:password" -Trigger $trigger -TaskName "storjshare Auto-Update" -Description "Updates storjshare software $howoften at $global:checktime local time" -RunLevel Highest
-            #} else {
-                 Register-ScheduledTask -Action $action -Trigger $trigger -TaskName "storjshare Auto-Update" -Description "Updates storjshare software $howoften at $global:checktime local time" -RunLevel Highest
-            #}
-
+            Register-ScheduledTask -Action $action -Trigger $trigger -TaskName "storjshare Auto-Update" -Description "Updates storjshare software $howoften at $global:checktime local time" -RunLevel Highest -ErrorAction SilentlyContinue
+            
             LogWrite "Scheduled Task Created"
         } else {
             LogWrite "No autoupdate specified skipping"
@@ -1687,8 +1725,6 @@ LogWrite -color Green "Service Review Completed"
 LogWrite ""
 LogWrite -color Yellow "=============================================="
 LogWrite ""
-LogWrite -color Yellow "=============================================="
-LogWrite ""
 LogWrite -color Cyan "Reviewing Script Registry Version..."
 storjshare_cli_checkver $global:script_version
 LogWrite -color Green "Script Registry Version Completed"
@@ -1704,7 +1740,7 @@ LogWrite -color Cyan "Completed storjshare-cli Automated Management"
 LogWrite -color Cyan "storjshare-cli should now be running as a windows service."
 LogWrite -color Cyan "You can check Control Panel > Administrative Tools -> Services -> storjshare-cli and see if the service is running"
 LogWrite -color Cyan "You can also check %WINDIR%\Temp\storj\cli to see if any logs are generating and what the details of the logs are saying"
-LogWrite -color Cyan "$global:datadir\farms.db folder should slowly start building up shards (ldb files) if everything is configured properly"
+LogWrite -color Cyan "${global:datadir}farms.db folder should slowly start building up shards (ldb files) if everything is configured properly"
 LogWrite ""
 LogWrite -color Yellow "=============================================="
 ErrorOut -code $global:return_code
