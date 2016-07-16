@@ -812,7 +812,7 @@ LogWrite -color Green "storj Review Completed"
 LogWrite ""
 LogWrite -color Yellow "=============================================="
 LogWrite -color Cyan "Completed storj Automated Management"
-LogWrite -color Cyan "You can now"
+LogWrite -color Cyan "You can now utilize Storj core"
 LogWrite ""
 LogWrite -color Yellow "=============================================="
 ErrorOut -code $global:return_code
