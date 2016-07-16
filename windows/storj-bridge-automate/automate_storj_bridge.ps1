@@ -545,7 +545,7 @@ function RabbitMQCheck([string]$version) {
 
 	    LogWrite "InstallingRabbitMQ $version..."
         $Arguments = "/S"
-	    InstallEXE $save_path $Arguments
+	    InstallRabbitEXE $save_path $Arguments
         
         If(!(Get-IsProgramInstalled "RabbitMQ")) {
            ErrorOut "RabbitMQ did not complete installation successfully...try manually installing it..."
@@ -1148,6 +1148,21 @@ function InstallEXE([string]$installer, [string]$Arguments) {
     } else {
         Start-Process "`"$installer`"" -ArgumentList $Arguments -Wait
     }
+	RemoveLowRiskFiles
+}
+
+function InstallRabbitEXE([string]$installer, [string]$Arguments) {
+	Unblock-File $installer
+	AddLowRiskFiles
+
+    if($silent) {
+        Start-Process "`"$installer`"" -ArgumentList $Arguments -NoNewWindow
+    } else {
+        Start-Process "`"$installer`"" -ArgumentList $Arguments
+    }
+
+    Start-Sleep -s 20
+
 	RemoveLowRiskFiles
 }
 
