@@ -13,4 +13,4 @@ IF NOT EXIST "%install%" (
 
 REM Run Power Shell Script
 PowerShell.exe -NoProfile -Command "& {Unblock-File '%install%'}"
-PowerShell.exe -NoProfile -Command "& {Start-Process PowerShell.exe -ArgumentList '-NoProfile -NoLogo -NoExit -WindowStyle Normal -ExecutionPolicy Bypass & {&''%install%''}' -Verb RunAs}"
+PowerShell.exe -NoProfile -Command "& {Start-Process PowerShell.exe -ArgumentList '-NoProfile -NonInteractive -NoLogo -NoExit -WindowStyle Normal -ExecutionPolicy Bypass & {&''%install%''}' -Verb RunAs}"
