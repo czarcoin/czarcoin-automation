@@ -120,7 +120,7 @@ $mongodb_log='' + $save_dir + '\' + 'mongodb.log'; #Default: runas overwrites th
 $erlang_ver="19.0" # Default: 19.0
 $erlang_compare_ver="19 (8.0)" # Default: 19 (8.0)
 
-$rabbitmq_ver="3.6.2" # Default: 3.6.2
+$rabbitmq_ver="3.6.3" # Default: 3.6.2
 
 $gitforwindows_ver="2.8.3"  #   (Default: 2.8.3)
 
