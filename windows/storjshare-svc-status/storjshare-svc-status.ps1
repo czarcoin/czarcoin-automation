@@ -47,7 +47,7 @@ param(
 #---------------------------------------------------------[Initialisations]--------------------------------------------------------
 
 $global:total=0
-$global:script_version="1.0"
+$global:script_version="1.1"
 $global:howoften="Daily"
 $global:checktime="3am"
 $global:runas=""
@@ -107,7 +107,7 @@ function handleParameters() {
 
     #checks the silent parameter and if true, writes to log instead of console, also ignores pausing
     if($silent) {
-        LogWrite "Logging to file $storjshare_cli_install_log_file"
+        LogWrite "Logging to file $storjshare_svc_status_install_log_file"
     }
     else
     {
@@ -167,8 +167,8 @@ param(
     [string[]] $users
     )
     #Get list of currently used SIDs 
-    secedit /export /cfg "$storjshare_cli_install_log_path\tempexport.inf"
-    $curSIDs = Select-String "$storjshare_cli_install_log_path\tempexport.inf" -Pattern "SeServiceLogonRight" 
+    secedit /export /cfg "$storjshare_svc_status_install_log_path\tempexport.inf"
+    $curSIDs = Select-String "$storjshare_svc_status_install_log_path\tempexport.inf" -Pattern "SeServiceLogonRight" 
     $Sids = $curSIDs.line 
     $sidstring = ""
     foreach($user in $users){
@@ -181,27 +181,27 @@ param(
     if($sidstring){
         $newSids = $sids + $sidstring
         LogWrite "New Sids: $newSids"
-        $tempinf = Get-Content "$storjshare_cli_install_log_path\tempexport.inf"
+        $tempinf = Get-Content "$storjshare_svc_status_install_log_path\tempexport.inf"
         $tempinf = $tempinf.Replace($Sids,$newSids)
-        Add-Content -Path "$storjshare_cli_install_log_path\tempimport.inf" -Value $tempinf
-        secedit /import /db "$storjshare_cli_install_log_path\secedit.sdb" /cfg "$storjshare_cli_install_log_path\tempimport.inf" 
-        secedit /configure /db "$storjshare_cli_install_log_path\secedit.sdb"
+        Add-Content -Path "$storjshare_svc_status_install_log_path\tempimport.inf" -Value $tempinf
+        secedit /import /db "$storjshare_svc_status_install_log_path\secedit.sdb" /cfg "$storjshare_svc_status_install_log_path\tempimport.inf" 
+        secedit /configure /db "$storjshare_svc_status_install_log_path\secedit.sdb"
  
         gpupdate /force 
     }else{
         LogWrite "No new sids, skipping..."
     }
-    del "$storjshare_cli_install_log_path\tempimport.inf" -force -ErrorAction SilentlyContinue
-    del "$storjshare_cli_install_log_path\secedit.sdb" -force -ErrorAction SilentlyContinue
-    del "$storjshare_cli_install_log_path\tempexport.inf" -force
+    del "$storjshare_svc_status_install_log_path\tempimport.inf" -force -ErrorAction SilentlyContinue
+    del "$storjshare_svc_status_install_log_path\secedit.sdb" -force -ErrorAction SilentlyContinue
+    del "$storjshare_svc_status_install_log_path\tempexport.inf" -force
 }
 
 function GetUserEnvironment([string]$env_var) {
 	$filename = 'user_env.log';
-	$save_path = '' + $storjshare_cli_install_log_path + '\' + $filename;
+	$save_path = '' + $storjshare_svc_status_install_log_path + '\' + $filename;
 
-	if(!(Test-Path -pathType container $storjshare_cli_install_log_path)) {
-	    ErrorOut "Save directory $storjshare_cli_install_log_path does not exist";
+	if(!(Test-Path -pathType container $storjshare_svc_status_install_log_path)) {
+	    ErrorOut "Save directory $storjshare_svc_status_install_log_path does not exist";
 	}
 
     $Arguments="/c ECHO $env_var"
@@ -239,15 +239,15 @@ Function LogWrite([string]$logstring,[string]$color) {
     $logmessage="["+$LogTime+"] "+$logstring
     if($silent) {
         if($logstring) {
-            if(!(Test-Path -pathType container $storjshare_cli_install_log_path)) {
+            if(!(Test-Path -pathType container $storjshare_svc_status_install_log_path)) {
 
-                New-Item $storjshare_cli_install_log_path -type directory -force | Out-Null
+                New-Item $storjshare_svc_status_install_log_path -type directory -force | Out-Null
 
-                if(!(Test-Path -pathType container $storjshare_cli_install_log_path)) {
-		            ErrorOut "Log Directory $storjshare_cli_install_log_path failed to create, try it manually..."
+                if(!(Test-Path -pathType container $storjshare_svc_status_install_log_path)) {
+		            ErrorOut "Log Directory $storjshare_svc_status_install_log_path failed to create, try it manually..."
 	            }
 	        }
-            Add-content $storjshare_cli_install_log_file -value $logmessage
+            Add-content $storjshare_svc_status_install_log_file -value $logmessage
         }
     } else {
         if(!$logstring) {
