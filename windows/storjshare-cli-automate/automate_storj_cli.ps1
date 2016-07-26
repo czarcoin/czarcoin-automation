@@ -159,7 +159,7 @@ param(
 
 #---------------------------------------------------------[Initialisations]--------------------------------------------------------
 
-$global:script_version="4.0" # Script version
+$global:script_version="4.1" # Script version
 $global:reboot_needed=""
 $global:noupnp=""
 $global:installsvc="true"
@@ -202,6 +202,7 @@ $storjshare_cli_install_log_path=$save_dir
 $storjshare_cli_install_log_file=$storjshare_cli_install_log_path + '\automate_storjshare_cli.log'; #outputs everything to a file if -silent is used, instead of the console
 $storjshare_cli_log_path=$work_directory + '\cli'
 $global:storjshare_cli_log="$storjshare_cli_log_path\$global:svcname.log"
+$global:storjshare_cli_log_ver="$save_dir\storjshare_ver.log"
 
 $gitforwindows_ver="2.8.3"  #   (Default: 2.8.3)
 
@@ -324,6 +325,7 @@ function handleParameters() {
             }
 
             $global:storjshare_cli_log="$storjshare_cli_log_path\$global:svcname.log"
+            $global:storjshare_cli_log_ver="$save_dir\storjshare_ver.log"
 
             if(!($datadir)) {
                 LogWrite "Using default storjshare datadir path: $datadir"
@@ -969,6 +971,28 @@ function storjshare-cliCheck() {
 
         LogWrite -color Green "storjshare-cli Installed Version: $version"
     }
+
+    LogWrite -color Cyan "Checking storjshare Version..."
+
+    LogWrite -color Cyan "Placing version into log file..."
+
+	if(!(Test-Path -pathType container $save_dir)) {
+	    ErrorOut "Log directory $save_dir does not exist";
+	}
+
+    $Arguments="/c storjshare -V"
+
+    if($global:runas) {
+        Start-Process "cmd.exe" -Credential $global:credential -WorkingDirectory "$global:npm_path" -ArgumentList $Arguments -RedirectStandardOutput $global:storjshare_cli_log_ver
+    } else {
+        Start-Process "cmd.exe" -ArgumentList $Arguments -RedirectStandardOutput $global:storjshare_cli_log_ver
+    }
+
+    if(!(Test-Path $save_path) -or !(Test-Path $save_path_err)) {
+        ErrorOut "failed to get storjshare version...try manually running it..."
+    }
+
+    LogWrite -color Cyan "Version recorded."
 }
 
 function Get-IsProgramInstalled([string]$program) {
