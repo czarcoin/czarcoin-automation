@@ -159,7 +159,7 @@ param(
 
 #---------------------------------------------------------[Initialisations]--------------------------------------------------------
 
-$global:script_version="4.1" # Script version
+$global:script_version="4.2" # Script version
 $global:reboot_needed=""
 $global:noupnp=""
 $global:installsvc="true"
@@ -983,14 +983,14 @@ function storjshare-cliCheck() {
     $Arguments="/c storjshare -V"
 
     if($global:runas) {
-        Start-Process "cmd.exe" -Credential $global:credential -WorkingDirectory "$global:npm_path" -ArgumentList $Arguments -RedirectStandardOutput $global:storjshare_cli_log_ver
+        Start-Process "cmd.exe" -Credential $global:credential -WorkingDirectory "$global:npm_path" -ArgumentList $Arguments -RedirectStandardOutput $global:storjshare_cli_log_ver -Wait
     } else {
-        Start-Process "cmd.exe" -ArgumentList $Arguments -RedirectStandardOutput $global:storjshare_cli_log_ver
+        Start-Process "cmd.exe" -ArgumentList $Arguments -RedirectStandardOutput $global:storjshare_cli_log_ver -Wait
     }
 
-    if(!(Test-Path $save_path) -or !(Test-Path $save_path_err)) {
-        ErrorOut "failed to get storjshare version...try manually running it..."
-    }
+    $timestamp = Get-Date -Format "yyyy-MM-dd HH:MM:ss"
+
+    Add-Content $global:storjshare_cli_log_ver "Timestamp: $timestamp"
 
     LogWrite -color Cyan "Version recorded."
 }
