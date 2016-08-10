@@ -56,7 +56,7 @@ param(
 #---------------------------------------------------------[Initialisations]--------------------------------------------------------
 
 $global:total=0
-$global:script_version="1.7"
+$global:script_version="1.8"
 $global:howoften="Daily"
 $global:checktime="3am"
 $global:runas=""
@@ -397,7 +397,7 @@ function autoupdate($howoften) {
         $Arguments="-NoProfile -NoLogo -Noninteractive -WindowStyle Hidden -ExecutionPolicy Bypass ""${global:npm_path}storjshare-drive-usage.ps1"" -silent -noautoupdate -datadir ""$global:datadir"""
         $action = New-ScheduledTaskAction -Execute 'Powershell.exe' -Argument $Arguments
         $repeat = (New-TimeSpan -Minutes 10)
-        $trigger = New-JobTrigger -Once -At (Get-Date).Date -RepeatIndefinitely -RepetitionInterval $repeat
+        $trigger = New-JobTrigger -AtLogOn -RepeatIndefinitely -RepetitionInterval $repeat
 
         if($global:runas) {
                 Register-ScheduledTask -Action $action -User $global:username -Password "$global:password" -Trigger $trigger -TaskName "storjshare Drive Usage Report" -Description "Generates Drive Usage Report" -RunLevel Highest
