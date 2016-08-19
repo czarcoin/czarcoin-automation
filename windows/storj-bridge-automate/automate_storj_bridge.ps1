@@ -82,7 +82,7 @@ param(
 
 #---------------------------------------------------------[Initialisations]--------------------------------------------------------
 
-$global:script_version="3.2 Release" # Script version
+$global:script_version="3.3 Release" # Script version
 $global:reboot_needed=""
 $global:enableupnp=""
 $global:autoreoot=""
@@ -124,7 +124,7 @@ $rabbitmq_ver="3.6.3" # Default: 3.6.2
 
 $nodejs_ver="4" #make sure to reference Major Branch Version (Default: 4)
 
-$python_ver="2.7.11" #currently only use version 2 branch (Default: 2.7.11)
+$python_ver="2" #make sure to reference Major Branch Version (Default: 2)
 $python_path = "C:\Python27\" #make sure ends with \ (Default: C:\Python27\)
 
 $visualstudio_ver="2015" # currently only supports 2015 Edition (Default: 2015)
@@ -885,7 +885,7 @@ function NodejsCheck([string]$version) {
 function PythonCheck([string]$version) {
     LogWrite "Checking if Python is installed..."
     If(!(Get-IsProgramInstalled "Python")) {
-        LogWrite "Python $version is not installed."
+        LogWrite "Python is not installed."
         if ([System.IntPtr]::Size -eq 4) {
             $arch="32-bit"
             $arch_ver=''
@@ -893,6 +893,55 @@ function PythonCheck([string]$version) {
             $arch="64-bit"
             $arch_ver='.amd64'
         }
+
+        $url = "https://www.python.org/ftp/python/"
+        $site = Invoke-WebRequest -URI "$url" -UseBasicParsing
+        
+        $last=-1
+        $site.Links | Foreach {
+            $url_items = $_.href
+            if($url_items -like "${version}.*") {
+                $filename=$url_items
+                $filename=$filename.Substring(0,$filename.Length-1)
+                $version_check=$filename.Substring($version.Length+1)
+                
+                if($version_check.IndexOf(".") -gt 0) {
+                    $pos = $version_check.IndexOf(".")
+                    $get_version_part=$version_check.Substring(0,$pos)
+                } else {
+                     $get_version_part=$version_check
+                }
+
+                if([int]$get_version_part -gt [int]$last) {
+                    $last=$get_version_part
+                }
+                
+            }
+        }
+
+        $version="${version}.${last}"
+        $last=-1
+        $site.Links | Foreach {
+            $url_items = $_.href
+            if($url_items -like "${version}.*") {
+                $filename=$url_items
+                $filename=$filename.Substring(0,$filename.Length-1)
+                $version_check=$filename.Substring($version.Length+1)
+                
+                if($version_check.IndexOf(".") -gt 0) {
+                    $pos = $version_check.IndexOf(".")
+                    $get_version_part=$version_check.Substring(0,$pos)
+                } else {
+                     $get_version_part=$version_check
+                }
+
+                if([int]$get_version_part -gt [int]$last) {
+                    $last=$get_version_part
+                }
+                
+            }
+        }
+        $version="${version}.${last}"
 
 	    $filename = 'python-' + $version + $arch_ver + '.msi';
 	    $save_path = '' + $save_dir + '\' + $filename;
@@ -930,9 +979,58 @@ function PythonCheck([string]$version) {
             ErrorOut "Python version not supported.  Please remove all versions of Python and run the script again."
         }
 
-        $result = CompareVersions $installed_version $python_ver
+        $url = "https://www.python.org/ftp/python/"
+        $site = Invoke-WebRequest -URI "$url" -UseBasicParsing
+        
+        $last=-1
+        $site.Links | Foreach {
+            $url_items = $_.href
+            if($url_items -like "${version}.*") {
+                $filename=$url_items
+                $filename=$filename.Substring(0,$filename.Length-1)
+                $version_check=$filename.Substring($version.Length+1)
+                
+                if($version_check.IndexOf(".") -gt 0) {
+                    $pos = $version_check.IndexOf(".")
+                    $get_version_part=$version_check.Substring(0,$pos)
+                } else {
+                     $get_version_part=$version_check
+                }
+
+                if([int]$get_version_part -gt [int]$last) {
+                    $last=$get_version_part
+                }
+                
+            }
+        }
+
+        $version="${version}.${last}"
+        $last=-1
+        $site.Links | Foreach {
+            $url_items = $_.href
+            if($url_items -like "${version}.*") {
+                $filename=$url_items
+                $filename=$filename.Substring(0,$filename.Length-1)
+                $version_check=$filename.Substring($version.Length+1)
+                
+                if($version_check.IndexOf(".") -gt 0) {
+                    $pos = $version_check.IndexOf(".")
+                    $get_version_part=$version_check.Substring(0,$pos)
+                } else {
+                     $get_version_part=$version_check
+                }
+
+                if([int]$get_version_part -gt [int]$last) {
+                    $last=$get_version_part
+                }
+                
+            }
+        }
+        $version="${version}.${last}"
+
+        $result = CompareVersions $installed_version $version
         if($result -eq "-2") {
-            ErrorOut "Unable to match Python version (Installed Version: $installed_version / Requested Version: $python_ver)"
+            ErrorOut "Unable to match Python version (Installed Version: $installed_version / Requested Version: $version)"
         }
 
         if($result -eq 0)
@@ -942,7 +1040,7 @@ function PythonCheck([string]$version) {
             LogWrite "Python is newer than the recommended version. Skipping..."
         } else {
             LogWrite "Python is out of date."
-            LogWrite -Color Cyan "Python $installed_version will be updated to $python_ver..."
+            LogWrite -Color Cyan "Python $installed_version will be updated to $version..."
             if ([System.IntPtr]::Size -eq 4) {
                 $arch="32-bit"
                 $arch_ver=''
@@ -951,18 +1049,18 @@ function PythonCheck([string]$version) {
                 $arch_ver='.amd64'
             }
 
-	        $filename = 'python-' + $python_ver + $arch_ver + '.msi';
+	        $filename = 'python-' + $version + $arch_ver + '.msi';
 	        $save_path = '' + $save_dir + '\' + $filename;
-            $url='http://www.python.org/ftp/python/' + $python_ver + '/' + $filename;
+            $url='http://www.python.org/ftp/python/' + $version + '/' + $filename;
 	        if(!(Test-Path -pathType container $save_dir)) {
 		        ErrorOut "Save directory $save_dir does not exist";
 	        }
 
-            LogWrite "Downloading Python ($arch) $python_ver..."
+            LogWrite "Downloading Python ($arch) $version..."
             DownloadFile $url $save_path
             LogWrite "Python downloaded"
 
-	        LogWrite "Installing Python $python_ver..."
+	        LogWrite "Installing Python $version..."
 	        InstallMSI $save_path
         
             If(!(Get-IsProgramInstalled "Python")) {
@@ -971,7 +1069,7 @@ function PythonCheck([string]$version) {
 
             $global:reboot_needed="true"
             LogWrite -color Green "Python Updated Successfully"
-            $installed_version=$python_ver
+            $installed_version=$version
         }
 
         LogWrite -color Green "Python Installed Version: $installed_version"
@@ -1726,7 +1824,7 @@ LogWrite -color Yellow "Recommended Versions of Software"
 LogWrite -color Cyan "MongoDB: $mongodb_ver"
 LogWrite -color Cyan "Git for Windows: Latest Version"
 LogWrite -color Cyan "Node.js - Major Branch: $nodejs_ver"
-LogWrite -color Cyan "Python: $python_ver"
+LogWrite -color Cyan "Python - Major Branch: $python_ver"
 LogWrite -color Cyan "Erlang: $erlang_ver"
 LogWrite -color Cyan "RabbitMQ: $rabbitmq_ver"
 LogWrite -color Cyan "Visual Studio: $visualstudio_ver Commmunity Edition"
