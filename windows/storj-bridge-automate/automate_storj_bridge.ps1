@@ -1752,7 +1752,7 @@ GitForWindowsCheck
 LogWrite -color Green "Git for Windows Review Completed"
 LogWrite ""
 LogWrite -color Yellow "Reviewing Node.js..."
-NodejsCheck
+NodejsCheck $nodejs_ver
 LogWrite -color Green "Node.js Review Completed"
 LogWrite ""
 LogWrite -color Yellow "Reviewing Python..."
