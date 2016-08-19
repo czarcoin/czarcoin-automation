@@ -82,7 +82,7 @@ param(
 
 #---------------------------------------------------------[Initialisations]--------------------------------------------------------
 
-$global:script_version="3.1 Release" # Script version
+$global:script_version="3.2 Release" # Script version
 $global:reboot_needed=""
 $global:enableupnp=""
 $global:autoreoot=""
@@ -121,8 +121,6 @@ $erlang_ver="19.0" # Default: 19.0
 $erlang_compare_ver="19 (8.0)" # Default: 19 (8.0)
 
 $rabbitmq_ver="3.6.3" # Default: 3.6.2
-
-$gitforwindows_ver="2.8.3"  #   (Default: 2.8.3)
 
 $nodejs_ver="4" #make sure to reference Major Branch Version (Default: 4)
 
@@ -605,10 +603,27 @@ function RabbitMQCheck([string]$version) {
     }
 }
 
-function GitForWindowsCheck([string]$version) {
+function GitForWindowsCheck() {
     LogWrite "Checking if Git for Windows is installed..."
     If(!(Get-IsProgramInstalled "Git")) {
-        LogWrite "Git for Windows $version is not installed."
+        $url = "https://github.com/git-for-windows/git/releases/latest"
+        $request = [System.Net.WebRequest]::Create($url)
+        $request.AllowAutoRedirect=$false
+        $response = $request.GetResponse()
+ 
+        if ($response.StatusCode -eq "Found") {
+            $url = $response.GetResponseHeader("Location")
+        } else {
+            ErrorOut "Unable to determine latest version for Git for Windows"
+        }
+
+        $version = $url.Substring(0,$url.Length-".windows.1".Length)
+        $pos = $version.IndexOf("v")
+        $version = $version.Substring($pos+1)
+
+        LogWrite "Found Latest Version of Git for Windows - ${version}"
+
+        LogWrite "Git for Windows is not installed."
         if ([System.IntPtr]::Size -eq 4) {
             $arch="32-bit"
             $arch_ver='-32-bit'
@@ -649,9 +664,26 @@ function GitForWindowsCheck([string]$version) {
             ErrorOut "Git for Windows Version is Unknown - Error"
         }
 
-        $result = CompareVersions $installed_version $gitforwindows_ver
+        $url = "https://github.com/git-for-windows/git/releases/latest"
+        $request = [System.Net.WebRequest]::Create($url)
+        $request.AllowAutoRedirect=$false
+        $response = $request.GetResponse()
+ 
+        if ($response.StatusCode -eq "Found") {
+            $url = $response.GetResponseHeader("Location")
+        } else {
+            ErrorOut "Unable to determine latest version for Git for Windows"
+        }
+
+        $version = $url.Substring(0,$url.Length-".windows.1".Length)
+        $pos = $version.IndexOf("v")
+        $version = $version.Substring($pos+1)
+
+        LogWrite "Found Latest Version of Git for Windows - ${version}"
+
+        $result = CompareVersions $installed_version $version
         if($result -eq "-2") {
-            ErrorOut "Unable to match Git for Windows version (Installed Version: $installed_version / Requested Version: $gitforwindows_ver)"
+            ErrorOut "Unable to match Git for Windows version (Installed Version: $installed_version / Requested Version: $version)"
         }
 
         if($result -eq 0)
@@ -662,7 +694,7 @@ function GitForWindowsCheck([string]$version) {
         } else {
             LogWrite "Git for Windows is out of date."
             
-            LogWrite -Color Cyan "Git for Windows $installed_version will be updated to $gitforwindows_ver..."
+            LogWrite -Color Cyan "Git for Windows $installed_version will be updated to $version..."
             if ([System.IntPtr]::Size -eq 4) {
                 $arch="32-bit"
                 $arch_ver='-32-bit'
@@ -671,18 +703,18 @@ function GitForWindowsCheck([string]$version) {
                 $arch_ver='-64-bit'
             }
 
-    	    $filename = 'Git-' + $gitforwindows_ver + $arch_ver + '.exe';
+    	    $filename = 'Git-' + $version + $arch_ver + '.exe';
 	        $save_path = '' + $save_dir + '\' + $filename;
-            $url='https://github.com/git-for-windows/git/releases/download/v' + $gitforwindows_ver + '.windows.1/' + $filename;
+            $url='https://github.com/git-for-windows/git/releases/download/v' + $version + '.windows.1/' + $filename;
 	        if(!(Test-Path -pathType container $save_dir)) {
 		        ErrorOut "Save directory $save_dir does not exist"
 	        }
 
-            LogWrite "Downloading Git for Windows ($arch) $gitforwindows_ver..."
+            LogWrite "Downloading Git for Windows ($arch) $version..."
             DownloadFile $url $save_path
             LogWrite "Git for Windows downloaded"
 
-	        LogWrite "Installing Git for Windows $gitforwindows_ver..."
+	        LogWrite "Installing Git for Windows $version..."
             $Arguments = "/SILENT /COMPONENTS=""icons,ext\reg\shellhere,assoc,assoc_sh"""
 	        InstallEXE $save_path $Arguments
         
@@ -692,8 +724,10 @@ function GitForWindowsCheck([string]$version) {
 
             $global:reboot_needed="true"
             LogWrite -color Green "Git for Windows Updated Successfully"
-            $installed_version = $gitforwindows_ver            
+            $installed_version = $version           
         }
+
+        LogWrite -color Green "Git for Windows Installed Version: $installed_version"
     }
 }
 
@@ -1690,8 +1724,8 @@ LogWrite -color Red "USE AT YOUR OWN RISK"
 LogWrite ""
 LogWrite -color Yellow "Recommended Versions of Software"
 LogWrite -color Cyan "MongoDB: $mongodb_ver"
-LogWrite -color Cyan "Git for Windows: $gitforwindows_ver"
-LogWrite -color Cyan "Node.js: $nodejs_ver"
+LogWrite -color Cyan "Git for Windows: Latest Version"
+LogWrite -color Cyan "Node.js - Major Branch: $nodejs_ver"
 LogWrite -color Cyan "Python: $python_ver"
 LogWrite -color Cyan "Erlang: $erlang_ver"
 LogWrite -color Cyan "RabbitMQ: $rabbitmq_ver"
@@ -1714,11 +1748,11 @@ RabbitMQCheck $rabbitmq_ver
 LogWrite -color Green "RabbitMQ Review Completed"
 LogWrite ""
 LogWrite -color Yellow "Reviewing Git for Windows..."
-GitForWindowsCheck $gitforwindows_ver
+GitForWindowsCheck
 LogWrite -color Green "Git for Windows Review Completed"
 LogWrite ""
 LogWrite -color Yellow "Reviewing Node.js..."
-NodejsCheck $nodejs_ver
+NodejsCheck
 LogWrite -color Green "Node.js Review Completed"
 LogWrite ""
 LogWrite -color Yellow "Reviewing Python..."
