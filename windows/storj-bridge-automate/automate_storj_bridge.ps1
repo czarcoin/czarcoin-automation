@@ -82,7 +82,7 @@ param(
 
 #---------------------------------------------------------[Initialisations]--------------------------------------------------------
 
-$global:script_version="3.0 Release" # Script version
+$global:script_version="3.3 Release" # Script version
 $global:reboot_needed=""
 $global:enableupnp=""
 $global:autoreoot=""
@@ -122,11 +122,9 @@ $erlang_compare_ver="19 (8.0)" # Default: 19 (8.0)
 
 $rabbitmq_ver="3.6.3" # Default: 3.6.2
 
-$gitforwindows_ver="2.8.3"  #   (Default: 2.8.3)
+$nodejs_ver="4" #make sure to reference Major Branch Version (Default: 4)
 
-$nodejs_ver="4.4.5" #make sure to reference LTS branch version (Default: 4.4.5)
-
-$python_ver="2.7.11" #currently only use version 2 branch (Default: 2.7.11)
+$python_ver="2" #make sure to reference Major Branch Version (Default: 2)
 $python_path = "C:\Python27\" #make sure ends with \ (Default: C:\Python27\)
 
 $visualstudio_ver="2015" # currently only supports 2015 Edition (Default: 2015)
@@ -605,10 +603,27 @@ function RabbitMQCheck([string]$version) {
     }
 }
 
-function GitForWindowsCheck([string]$version) {
+function GitForWindowsCheck() {
     LogWrite "Checking if Git for Windows is installed..."
     If(!(Get-IsProgramInstalled "Git")) {
-        LogWrite "Git for Windows $version is not installed."
+        $url = "https://github.com/git-for-windows/git/releases/latest"
+        $request = [System.Net.WebRequest]::Create($url)
+        $request.AllowAutoRedirect=$false
+        $response = $request.GetResponse()
+ 
+        if ($response.StatusCode -eq "Found") {
+            $url = $response.GetResponseHeader("Location")
+        } else {
+            ErrorOut "Unable to determine latest version for Git for Windows"
+        }
+
+        $version = $url.Substring(0,$url.Length-".windows.1".Length)
+        $pos = $version.IndexOf("v")
+        $version = $version.Substring($pos+1)
+
+        LogWrite "Found Latest Version of Git for Windows - ${version}"
+
+        LogWrite "Git for Windows is not installed."
         if ([System.IntPtr]::Size -eq 4) {
             $arch="32-bit"
             $arch_ver='-32-bit'
@@ -649,9 +664,26 @@ function GitForWindowsCheck([string]$version) {
             ErrorOut "Git for Windows Version is Unknown - Error"
         }
 
-        $result = CompareVersions $installed_version $gitforwindows_ver
+        $url = "https://github.com/git-for-windows/git/releases/latest"
+        $request = [System.Net.WebRequest]::Create($url)
+        $request.AllowAutoRedirect=$false
+        $response = $request.GetResponse()
+ 
+        if ($response.StatusCode -eq "Found") {
+            $url = $response.GetResponseHeader("Location")
+        } else {
+            ErrorOut "Unable to determine latest version for Git for Windows"
+        }
+
+        $version = $url.Substring(0,$url.Length-".windows.1".Length)
+        $pos = $version.IndexOf("v")
+        $version = $version.Substring($pos+1)
+
+        LogWrite "Found Latest Version of Git for Windows - ${version}"
+
+        $result = CompareVersions $installed_version $version
         if($result -eq "-2") {
-            ErrorOut "Unable to match Git for Windows version (Installed Version: $installed_version / Requested Version: $gitforwindows_ver)"
+            ErrorOut "Unable to match Git for Windows version (Installed Version: $installed_version / Requested Version: $version)"
         }
 
         if($result -eq 0)
@@ -662,7 +694,7 @@ function GitForWindowsCheck([string]$version) {
         } else {
             LogWrite "Git for Windows is out of date."
             
-            LogWrite -Color Cyan "Git for Windows $installed_version will be updated to $gitforwindows_ver..."
+            LogWrite -Color Cyan "Git for Windows $installed_version will be updated to $version..."
             if ([System.IntPtr]::Size -eq 4) {
                 $arch="32-bit"
                 $arch_ver='-32-bit'
@@ -671,18 +703,18 @@ function GitForWindowsCheck([string]$version) {
                 $arch_ver='-64-bit'
             }
 
-    	    $filename = 'Git-' + $gitforwindows_ver + $arch_ver + '.exe';
+    	    $filename = 'Git-' + $version + $arch_ver + '.exe';
 	        $save_path = '' + $save_dir + '\' + $filename;
-            $url='https://github.com/git-for-windows/git/releases/download/v' + $gitforwindows_ver + '.windows.1/' + $filename;
+            $url='https://github.com/git-for-windows/git/releases/download/v' + $version + '.windows.1/' + $filename;
 	        if(!(Test-Path -pathType container $save_dir)) {
 		        ErrorOut "Save directory $save_dir does not exist"
 	        }
 
-            LogWrite "Downloading Git for Windows ($arch) $gitforwindows_ver..."
+            LogWrite "Downloading Git for Windows ($arch) $version..."
             DownloadFile $url $save_path
             LogWrite "Git for Windows downloaded"
 
-	        LogWrite "Installing Git for Windows $gitforwindows_ver..."
+	        LogWrite "Installing Git for Windows $version..."
             $Arguments = "/SILENT /COMPONENTS=""icons,ext\reg\shellhere,assoc,assoc_sh"""
 	        InstallEXE $save_path $Arguments
         
@@ -692,15 +724,17 @@ function GitForWindowsCheck([string]$version) {
 
             $global:reboot_needed="true"
             LogWrite -color Green "Git for Windows Updated Successfully"
-            $installed_version = $gitforwindows_ver            
+            $installed_version = $version           
         }
+
+        LogWrite -color Green "Git for Windows Installed Version: $installed_version"
     }
 }
 
 function NodejsCheck([string]$version) {
     LogWrite "Checking if Node.js is installed..."
     If(!(Get-IsProgramInstalled "Node.js")) {
-        LogWrite "Nodejs $version is not installed."
+        LogWrite "Node.js is not installed."
         if ([System.IntPtr]::Size -eq 4) {
             $arch="32-bit"
             $arch_ver='-x86'
@@ -709,18 +743,41 @@ function NodejsCheck([string]$version) {
             $arch_ver='-x64'
         }
 
-	    $filename = 'node-v' + $version + $arch_ver + '.msi';
+        LogWrite "Gathering Latest Node.js for Major Version ${version}..."
+
+        $url = "https://nodejs.org/dist/latest-v${version}.x/"
+        $site = Invoke-WebRequest -URI "$url" -UseBasicParsing
+        
+        $found=0
+        $site.Links | Foreach {
+            $url_items = $_.href
+
+            if($url_items -like "*${arch_ver}.msi") {
+                $filename=$url_items
+                $found=1
+            }
+        }
+
+        if($found -ne 1) {
+            ErrorOut "Unable to gather Node.js Version";
+        }
+
+        $url="${url}$filename"
+        $version = $filename.Substring(0,$filename.Length-"${arch_ver}.msi".Length)
+        $pos = $version.IndexOf("v")
+        $version = $version.Substring($pos+1)
+        LogWrite "Found Latest Version of Node.js - ${version}"
+
 	    $save_path = '' + $save_dir + '\' + $filename;
-        $url='https://nodejs.org/dist/v' + $version + '/' + $filename;
 	    if(!(Test-Path -pathType container $save_dir)) {
 		    ErrorOut "Save directory $save_dir does not exist";
 	    }
 
-        LogWrite "Downloading Node.js LTS ($arch) $version..."
+        LogWrite "Downloading Node.js ($arch) $version..."
         DownloadFile $url $save_path
-        LogWrite "Nodejs downloaded"
+        LogWrite "Node.js downloaded"
 
-	    LogWrite "Installing Node.js LTS $version..."
+	    LogWrite "Installing Node.js $version..."
 	    InstallMSI $save_path
         
         If(!(Get-IsProgramInstalled "Node.js")) {
@@ -740,9 +797,41 @@ function NodejsCheck([string]$version) {
             ErrorOut "Node.js Version is Unknown - Error"
         }
 
-        $result = CompareVersions $installed_version $nodejs_ver
+        if ([System.IntPtr]::Size -eq 4) {
+            $arch="32-bit"
+            $arch_ver='-x86'
+        } else {
+            $arch="64-bit"
+            $arch_ver='-x64'
+        }
+
+        LogWrite "Gathering Latest Node.js for Major Version ${version}..."
+        $url = "https://nodejs.org/dist/latest-v${version}.x/"
+        $site = Invoke-WebRequest -URI "$url" -UseBasicParsing
+        
+        $found=0
+        $site.Links | Foreach {
+            $url_items = $_.href
+
+            if($url_items -like "*${arch_ver}.msi") {
+                $filename=$url_items
+                $found=1
+            }
+        }
+
+        if($found -ne 1) {
+            ErrorOut "Unable to gather Node.js Version";
+        }
+
+        $url="${url}$filename"
+        $version = $filename.Substring(0,$filename.Length-"${arch_ver}.msi".Length)
+        $pos = $version.IndexOf("v")
+        $version = $version.Substring($pos+1)
+        LogWrite "Found Latest Version ${version}"
+
+        $result = CompareVersions $installed_version $version
         if($result -eq "-2") {
-            ErrorOut "Unable to match Node.js version (Installed Version: $installed_version / Requested Version: $nodejs_ver)"
+            ErrorOut "Unable to match Node.js version (Installed Version: $installed_version / Requested Version: $version)"
         }
 
         if($result -eq 0)
@@ -752,27 +841,19 @@ function NodejsCheck([string]$version) {
             LogWrite "Node.js is newer than the recommended version. Skipping..."
         } else {
             LogWrite "Node.js is out of date."
-            LogWrite -Color Cyan "Node.js $installed_version will be updated to $nodejs_ver..."
-            if ([System.IntPtr]::Size -eq 4) {
-                $arch="32-bit"
-                $arch_ver='-x86'
-            } else {
-                $arch="64-bit"
-                $arch_ver='-x64'
-            }
+            LogWrite -Color Cyan "Node.js $installed_version will be updated to $version..."
 
-	        $filename = 'node-v' + $nodejs_ver + $arch_ver + '.msi';
 	        $save_path = '' + $save_dir + '\' + $filename;
-            $url='https://nodejs.org/dist/v' + $nodejs_ver + '/' + $filename;
+
 	        if(!(Test-Path -pathType container $save_dir)) {
 		        ErrorOut "Save directory $save_dir does not exist";
 	        }
 
-            LogWrite "Downloading Node.js LTS ($arch) $nodejs_ver..."
+            LogWrite "Downloading Node.js ($arch) $version..."
             DownloadFile $url $save_path
             LogWrite "Nodejs downloaded"
 
-	        LogWrite "Installing Node.js LTS $nodejs_ver..."
+	        LogWrite "Installing Node.js $version..."
 	        InstallMSI $save_path
         
             If(!(Get-IsProgramInstalled "Node.js")) {
@@ -781,7 +862,7 @@ function NodejsCheck([string]$version) {
 
             $global:reboot_needed="true"
             LogWrite -color Green "Node.js Updated Successfully"
-            $installed_version = $nodejs_ver
+            $installed_version = $version
         }
 
         LogWrite -color Green "Node.js Installed Version: $installed_version"
@@ -804,7 +885,7 @@ function NodejsCheck([string]$version) {
 function PythonCheck([string]$version) {
     LogWrite "Checking if Python is installed..."
     If(!(Get-IsProgramInstalled "Python")) {
-        LogWrite "Python $version is not installed."
+        LogWrite "Python is not installed."
         if ([System.IntPtr]::Size -eq 4) {
             $arch="32-bit"
             $arch_ver=''
@@ -812,6 +893,55 @@ function PythonCheck([string]$version) {
             $arch="64-bit"
             $arch_ver='.amd64'
         }
+
+        $url = "https://www.python.org/ftp/python/"
+        $site = Invoke-WebRequest -URI "$url" -UseBasicParsing
+        
+        $last=-1
+        $site.Links | Foreach {
+            $url_items = $_.href
+            if($url_items -like "${version}.*") {
+                $filename=$url_items
+                $filename=$filename.Substring(0,$filename.Length-1)
+                $version_check=$filename.Substring($version.Length+1)
+                
+                if($version_check.IndexOf(".") -gt 0) {
+                    $pos = $version_check.IndexOf(".")
+                    $get_version_part=$version_check.Substring(0,$pos)
+                } else {
+                     $get_version_part=$version_check
+                }
+
+                if([int]$get_version_part -gt [int]$last) {
+                    $last=$get_version_part
+                }
+                
+            }
+        }
+
+        $version="${version}.${last}"
+        $last=-1
+        $site.Links | Foreach {
+            $url_items = $_.href
+            if($url_items -like "${version}.*") {
+                $filename=$url_items
+                $filename=$filename.Substring(0,$filename.Length-1)
+                $version_check=$filename.Substring($version.Length+1)
+                
+                if($version_check.IndexOf(".") -gt 0) {
+                    $pos = $version_check.IndexOf(".")
+                    $get_version_part=$version_check.Substring(0,$pos)
+                } else {
+                     $get_version_part=$version_check
+                }
+
+                if([int]$get_version_part -gt [int]$last) {
+                    $last=$get_version_part
+                }
+                
+            }
+        }
+        $version="${version}.${last}"
 
 	    $filename = 'python-' + $version + $arch_ver + '.msi';
 	    $save_path = '' + $save_dir + '\' + $filename;
@@ -849,9 +979,58 @@ function PythonCheck([string]$version) {
             ErrorOut "Python version not supported.  Please remove all versions of Python and run the script again."
         }
 
-        $result = CompareVersions $installed_version $python_ver
+        $url = "https://www.python.org/ftp/python/"
+        $site = Invoke-WebRequest -URI "$url" -UseBasicParsing
+        
+        $last=-1
+        $site.Links | Foreach {
+            $url_items = $_.href
+            if($url_items -like "${version}.*") {
+                $filename=$url_items
+                $filename=$filename.Substring(0,$filename.Length-1)
+                $version_check=$filename.Substring($version.Length+1)
+                
+                if($version_check.IndexOf(".") -gt 0) {
+                    $pos = $version_check.IndexOf(".")
+                    $get_version_part=$version_check.Substring(0,$pos)
+                } else {
+                     $get_version_part=$version_check
+                }
+
+                if([int]$get_version_part -gt [int]$last) {
+                    $last=$get_version_part
+                }
+                
+            }
+        }
+
+        $version="${version}.${last}"
+        $last=-1
+        $site.Links | Foreach {
+            $url_items = $_.href
+            if($url_items -like "${version}.*") {
+                $filename=$url_items
+                $filename=$filename.Substring(0,$filename.Length-1)
+                $version_check=$filename.Substring($version.Length+1)
+                
+                if($version_check.IndexOf(".") -gt 0) {
+                    $pos = $version_check.IndexOf(".")
+                    $get_version_part=$version_check.Substring(0,$pos)
+                } else {
+                     $get_version_part=$version_check
+                }
+
+                if([int]$get_version_part -gt [int]$last) {
+                    $last=$get_version_part
+                }
+                
+            }
+        }
+        $version="${version}.${last}"
+
+        $result = CompareVersions $installed_version $version
         if($result -eq "-2") {
-            ErrorOut "Unable to match Python version (Installed Version: $installed_version / Requested Version: $python_ver)"
+            ErrorOut "Unable to match Python version (Installed Version: $installed_version / Requested Version: $version)"
         }
 
         if($result -eq 0)
@@ -861,7 +1040,7 @@ function PythonCheck([string]$version) {
             LogWrite "Python is newer than the recommended version. Skipping..."
         } else {
             LogWrite "Python is out of date."
-            LogWrite -Color Cyan "Python $installed_version will be updated to $python_ver..."
+            LogWrite -Color Cyan "Python $installed_version will be updated to $version..."
             if ([System.IntPtr]::Size -eq 4) {
                 $arch="32-bit"
                 $arch_ver=''
@@ -870,18 +1049,18 @@ function PythonCheck([string]$version) {
                 $arch_ver='.amd64'
             }
 
-	        $filename = 'python-' + $python_ver + $arch_ver + '.msi';
+	        $filename = 'python-' + $version + $arch_ver + '.msi';
 	        $save_path = '' + $save_dir + '\' + $filename;
-            $url='http://www.python.org/ftp/python/' + $python_ver + '/' + $filename;
+            $url='http://www.python.org/ftp/python/' + $version + '/' + $filename;
 	        if(!(Test-Path -pathType container $save_dir)) {
 		        ErrorOut "Save directory $save_dir does not exist";
 	        }
 
-            LogWrite "Downloading Python ($arch) $python_ver..."
+            LogWrite "Downloading Python ($arch) $version..."
             DownloadFile $url $save_path
             LogWrite "Python downloaded"
 
-	        LogWrite "Installing Python $python_ver..."
+	        LogWrite "Installing Python $version..."
 	        InstallMSI $save_path
         
             If(!(Get-IsProgramInstalled "Python")) {
@@ -890,7 +1069,7 @@ function PythonCheck([string]$version) {
 
             $global:reboot_needed="true"
             LogWrite -color Green "Python Updated Successfully"
-            $installed_version=$python_ver
+            $installed_version=$version
         }
 
         LogWrite -color Green "Python Installed Version: $installed_version"
@@ -1643,9 +1822,9 @@ LogWrite -color Red "USE AT YOUR OWN RISK"
 LogWrite ""
 LogWrite -color Yellow "Recommended Versions of Software"
 LogWrite -color Cyan "MongoDB: $mongodb_ver"
-LogWrite -color Cyan "Git for Windows: $gitforwindows_ver"
-LogWrite -color Cyan "Node.js: $nodejs_ver"
-LogWrite -color Cyan "Python: $python_ver"
+LogWrite -color Cyan "Git for Windows: Latest Version"
+LogWrite -color Cyan "Node.js - Major Branch: $nodejs_ver"
+LogWrite -color Cyan "Python - Major Branch: $python_ver"
 LogWrite -color Cyan "Erlang: $erlang_ver"
 LogWrite -color Cyan "RabbitMQ: $rabbitmq_ver"
 LogWrite -color Cyan "Visual Studio: $visualstudio_ver Commmunity Edition"
@@ -1667,7 +1846,7 @@ RabbitMQCheck $rabbitmq_ver
 LogWrite -color Green "RabbitMQ Review Completed"
 LogWrite ""
 LogWrite -color Yellow "Reviewing Git for Windows..."
-GitForWindowsCheck $gitforwindows_ver
+GitForWindowsCheck
 LogWrite -color Green "Git for Windows Review Completed"
 LogWrite ""
 LogWrite -color Yellow "Reviewing Node.js..."
