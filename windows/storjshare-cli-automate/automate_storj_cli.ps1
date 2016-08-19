@@ -159,7 +159,7 @@ param(
 
 #---------------------------------------------------------[Initialisations]--------------------------------------------------------
 
-$global:script_version="4.2" # Script version
+$global:script_version="4.3" # Script version
 $global:reboot_needed=""
 $global:noupnp=""
 $global:installsvc="true"
@@ -206,7 +206,7 @@ $global:storjshare_cli_log_ver="$save_dir\storjshare_ver.log"
 
 $gitforwindows_ver="2.8.3"  #   (Default: 2.8.3)
 
-$nodejs_ver="4.4.5" #make sure to reference LTS branch version (Default: 4.4.5)
+$nodejs_ver="4" #make sure to reference Major Branch Version (Default: 4)
 
 $python_ver="2.7.11" #currently only use version 2 branch (Default: 2.7.11)
 $python_path = "C:\Python27\" #make sure ends with \ (Default: C:\Python27\)
@@ -609,10 +609,11 @@ function GitForWindowsCheck([string]$version) {
     }
 }
 
+
 function NodejsCheck([string]$version) {
     LogWrite "Checking if Node.js is installed..."
     If(!(Get-IsProgramInstalled "Node.js")) {
-        LogWrite "Nodejs $version is not installed."
+        LogWrite "Node.js is not installed."
         if ([System.IntPtr]::Size -eq 4) {
             $arch="32-bit"
             $arch_ver='-x86'
@@ -621,18 +622,41 @@ function NodejsCheck([string]$version) {
             $arch_ver='-x64'
         }
 
-	    $filename = 'node-v' + $version + $arch_ver + '.msi';
+        LogWrite "Gathering Latest Node.js for Major Version ${version}..."
+
+        $url = "https://nodejs.org/dist/latest-v${version}.x/"
+        $site = Invoke-WebRequest -URI "$url" -UseBasicParsing
+        
+        $found=0
+        $site.Links | Foreach {
+            $url_items = $_.href
+
+            if($url_items -like "*${arch_ver}.msi") {
+                $filename=$url_items
+                $found=1
+            }
+        }
+
+        if($found -ne 1) {
+            ErrorOut "Unable to gather Node.js Version";
+        }
+
+        $url="${url}$filename"
+        $version = $filename.Substring(0,$filename.Length-"${arch_ver}.msi".Length)
+        $pos = $version.IndexOf("v")
+        $version = $version.Substring($pos+1)
+        LogWrite "Found Latest Version of Node.js - ${version}"
+
 	    $save_path = '' + $save_dir + '\' + $filename;
-        $url='https://nodejs.org/dist/v' + $version + '/' + $filename;
 	    if(!(Test-Path -pathType container $save_dir)) {
 		    ErrorOut "Save directory $save_dir does not exist";
 	    }
 
-        LogWrite "Downloading Node.js LTS ($arch) $version..."
+        LogWrite "Downloading Node.js ($arch) $version..."
         DownloadFile $url $save_path
-        LogWrite "Nodejs downloaded"
+        LogWrite "Node.js downloaded"
 
-	    LogWrite "Installing Node.js LTS $version..."
+	    LogWrite "Installing Node.js $version..."
 	    InstallMSI $save_path
         
         If(!(Get-IsProgramInstalled "Node.js")) {
@@ -652,9 +676,41 @@ function NodejsCheck([string]$version) {
             ErrorOut "Node.js Version is Unknown - Error"
         }
 
-        $result = CompareVersions $installed_version $nodejs_ver
+        if ([System.IntPtr]::Size -eq 4) {
+            $arch="32-bit"
+            $arch_ver='-x86'
+        } else {
+            $arch="64-bit"
+            $arch_ver='-x64'
+        }
+
+        LogWrite "Gathering Latest Node.js for Major Version ${version}..."
+        $url = "https://nodejs.org/dist/latest-v${version}.x/"
+        $site = Invoke-WebRequest -URI "$url" -UseBasicParsing
+        
+        $found=0
+        $site.Links | Foreach {
+            $url_items = $_.href
+
+            if($url_items -like "*${arch_ver}.msi") {
+                $filename=$url_items
+                $found=1
+            }
+        }
+
+        if($found -ne 1) {
+            ErrorOut "Unable to gather Node.js Version";
+        }
+
+        $url="${url}$filename"
+        $version = $filename.Substring(0,$filename.Length-"${arch_ver}.msi".Length)
+        $pos = $version.IndexOf("v")
+        $version = $version.Substring($pos+1)
+        LogWrite "Found Latest Version ${version}"
+
+        $result = CompareVersions $installed_version $version
         if($result -eq "-2") {
-            ErrorOut "Unable to match Node.js version (Installed Version: $installed_version / Requested Version: $nodejs_ver)"
+            ErrorOut "Unable to match Node.js version (Installed Version: $installed_version / Requested Version: $version)"
         }
 
         if($result -eq 0)
@@ -664,27 +720,19 @@ function NodejsCheck([string]$version) {
             LogWrite "Node.js is newer than the recommended version. Skipping..."
         } else {
             LogWrite "Node.js is out of date."
-            LogWrite -Color Cyan "Node.js $installed_version will be updated to $nodejs_ver..."
-            if ([System.IntPtr]::Size -eq 4) {
-                $arch="32-bit"
-                $arch_ver='-x86'
-            } else {
-                $arch="64-bit"
-                $arch_ver='-x64'
-            }
+            LogWrite -Color Cyan "Node.js $installed_version will be updated to $version..."
 
-	        $filename = 'node-v' + $nodejs_ver + $arch_ver + '.msi';
 	        $save_path = '' + $save_dir + '\' + $filename;
-            $url='https://nodejs.org/dist/v' + $nodejs_ver + '/' + $filename;
+
 	        if(!(Test-Path -pathType container $save_dir)) {
 		        ErrorOut "Save directory $save_dir does not exist";
 	        }
 
-            LogWrite "Downloading Node.js LTS ($arch) $nodejs_ver..."
+            LogWrite "Downloading Node.js ($arch) $version..."
             DownloadFile $url $save_path
             LogWrite "Nodejs downloaded"
 
-	        LogWrite "Installing Node.js LTS $nodejs_ver..."
+	        LogWrite "Installing Node.js $version..."
 	        InstallMSI $save_path
         
             If(!(Get-IsProgramInstalled "Node.js")) {
@@ -693,7 +741,7 @@ function NodejsCheck([string]$version) {
 
             $global:reboot_needed="true"
             LogWrite -color Green "Node.js Updated Successfully"
-            $installed_version = $nodejs_ver
+            $installed_version = $version
         }
 
         LogWrite -color Green "Node.js Installed Version: $installed_version"
