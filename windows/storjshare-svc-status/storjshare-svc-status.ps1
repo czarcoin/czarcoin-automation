@@ -47,7 +47,7 @@ param(
 #---------------------------------------------------------[Initialisations]--------------------------------------------------------
 
 $global:total=0
-$global:script_version="1.2"
+$global:script_version="1.3"
 $global:howoften="Daily"
 $global:checktime="3am"
 $global:runas=""
@@ -235,7 +235,7 @@ Function StatusWrite([string]$logstring) {
 }
 
 Function LogWrite([string]$logstring,[string]$color) {
-    $LogTime = Get-Date -Format "MM-dd-yyyy hh:mm:ss"
+    $LogTime = Get-Date -Format "MM-dd-yyyy HH:mm:ss"
     $logmessage="["+$LogTime+"] "+$logstring
     if($silent) {
         if($logstring) {
