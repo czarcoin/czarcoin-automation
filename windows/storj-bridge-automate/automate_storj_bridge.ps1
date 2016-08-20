@@ -82,7 +82,7 @@ param(
 
 #---------------------------------------------------------[Initialisations]--------------------------------------------------------
 
-$global:script_version="3.3 Release" # Script version
+$global:script_version="3.4 Release" # Script version
 $global:reboot_needed=""
 $global:enableupnp=""
 $global:autoreoot=""
@@ -253,7 +253,7 @@ function handleParameters() {
 }
 
 Function LogWrite([string]$logstring,[string]$color) {
-    $LogTime = Get-Date -Format "MM-dd-yyyy hh:mm:ss"
+    $LogTime = Get-Date -Format "MM-dd-yyyy HH:mm:ss"
     $logmessage="["+$LogTime+"] "+$logstring
     if($silent) {
         if($logstring) {
