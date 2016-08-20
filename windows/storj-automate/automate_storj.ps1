@@ -25,7 +25,7 @@ param(
 
 #---------------------------------------------------------[Initialisations]--------------------------------------------------------
 
-$global:script_version="1.4" # Script version
+$global:script_version="1.5" # Script version
 $global:return_code=$global:error_success #default success
 $global:user_profile=$env:userprofile + '\' # (Default: %USERPROFILE%) - runas overwrites this variable
 $global:appdata=$env:appdata + '\' # (Default: %APPDATA%\) - runas overwrites this variable
