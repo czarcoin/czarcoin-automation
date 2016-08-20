@@ -125,7 +125,6 @@ $rabbitmq_ver="3.6.3" # Default: 3.6.2
 $nodejs_ver="4" #make sure to reference Major Branch Version (Default: 4)
 
 $python_ver="2" #make sure to reference Major Branch Version (Default: 2)
-$python_path = "C:\Python27\" #make sure ends with \ (Default: C:\Python27\)
 
 $visualstudio_ver="2015" # currently only supports 2015 Edition (Default: 2015)
 $visualstudio_dl="http://go.microsoft.com/fwlink/?LinkID=626924"  #  link to 2015 download   (Default: http://go.microsoft.com/fwlink/?LinkID=626924)
@@ -963,6 +962,7 @@ function PythonCheck([string]$version) {
 
         $global:reboot_needed="true"
         LogWrite -color Green "Python Installed Successfully"
+        $installed_version=$version
     }
     else
     {
@@ -1073,6 +1073,13 @@ function PythonCheck([string]$version) {
         }
 
         LogWrite -color Green "Python Installed Version: $installed_version"
+    }
+
+    $split_version=$installed_version.split('.')
+    $python_path="C:\Python" + $split_version[0] + $split_version[1] + "\"
+
+    if(!(Test-Path -pathType container $python_path)) {
+        ErrorOut "Save directory $python_path does not exist";
     }
 
     LogWrite "Checking for Python Environment Path..."
