@@ -25,7 +25,7 @@ param(
 
 #---------------------------------------------------------[Initialisations]--------------------------------------------------------
 
-$global:script_version="1.3" # Script version
+$global:script_version="1.4" # Script version
 $global:return_code=$global:error_success #default success
 $global:user_profile=$env:userprofile + '\' # (Default: %USERPROFILE%) - runas overwrites this variable
 $global:appdata=$env:appdata + '\' # (Default: %APPDATA%\) - runas overwrites this variable
@@ -95,7 +95,7 @@ function handleParameters() {
 }
 
 Function LogWrite([string]$logstring,[string]$color) {
-    $LogTime = Get-Date -Format "MM-dd-yyyy hh:mm:ss"
+    $LogTime = Get-Date -Format "MM-dd-yyyy HH:mm:ss"
     $logmessage="["+$LogTime+"] "+$logstring
     if($silent) {
         if($logstring) {
