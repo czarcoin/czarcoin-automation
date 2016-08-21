@@ -1049,10 +1049,7 @@ function storjshare-cliCheck() {
             LogWrite "npm $Arguments results"
             Add-content $storjshare_cli_install_log_file -value $result
         }
-        $result=$result.Split("@")
-        if($result -lt 2) {
-            ErrorOut "storjshare-cli Version is Unknown - Error"
-        }
+        $result=$result.Split('@')
         $version = $result[2]
         LogWrite -color Green "storjshare-cli Installed Version: $version"
     }
