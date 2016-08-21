@@ -578,8 +578,7 @@ function GitForWindowsCheck() {
         if($result -eq "-2") {
             ErrorOut "Unable to match Git for Windows version (Installed Version: $installed_version / Requested Version: $version)"
         }
-        if($result -eq 0)
-        {
+        if($result -eq 0) {
             LogWrite "Git for Windows is already updated. Skipping..."
         } elseif($result -eq 1) {
             LogWrite "Git for Windows is newer than the recommended version. Skipping..."
