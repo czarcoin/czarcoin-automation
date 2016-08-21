@@ -461,7 +461,7 @@ function handleParameters() {
                 $global:checktime=$checktime
             }
 
-            LogWrite "Auto-update set to happen every $global:howoften day(s) at $global:checktime"
+            LogWrite -Color Cyan "Auto-update set to happen every $global:howoften day(s) at $global:checktime"
         }
     }
 
