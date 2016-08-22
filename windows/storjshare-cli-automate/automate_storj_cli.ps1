@@ -155,7 +155,7 @@ param(
 
 #---------------------------------------------------------[Initialisations]--------------------------------------------------------
 
-$global:script_version="4.7" # Script version
+$global:script_version="4.8" # Script version
 $global:reboot_needed=""
 $global:noupnp=""
 $global:installsvc="true"
@@ -807,6 +807,7 @@ function PythonCheck([string]$version) {
         }
         $global:reboot_needed="true"
         LogWrite -color Green "Python Installed Successfully"
+        $installed_version=$version
     } else {
         LogWrite "Python already installed."
         LogWrite "Checking version..."
