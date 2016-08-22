@@ -89,7 +89,7 @@ param(
 
 #---------------------------------------------------------[Initialisations]--------------------------------------------------------
 
-$global:script_version="4.1 Release" # Script version
+$global:script_version="4.2 Release" # Script version
 $global:reboot_needed=""
 $global:enableupnp=""
 $global:autoreboot=""
@@ -1571,6 +1571,7 @@ function PythonCheck([string]$version) {
 
         $global:reboot_needed="true"
         LogWrite -color Green "Python Installed Successfully"
+        $installed_version=$python_ver
     }
     else
     {
