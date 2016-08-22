@@ -77,7 +77,7 @@ param(
 
 #---------------------------------------------------------[Initialisations]--------------------------------------------------------
 
-$global:script_version="3.5 Release" # Script version
+$global:script_version="3.6 Release" # Script version
 $global:reboot_needed=""
 $global:enableupnp=""
 $global:autoreboot=""
@@ -697,10 +697,14 @@ function MongoDBCheck() {
             LogWrite "Installing MongoDB Service"
 
             $version=$version.Split(".")
-            $version=$version[0] + "." + $version[2]
+            $version=$version[0] + "." + $version[1]
 
             $mongod_path='' + $env:programfiles + "\MongoDB\Server\${version}\bin\"
             $mongod_exe='' + $mongod_path + 'mongod.exe'; #Default: \mongod.exe
+
+            if(!(Test-Path -pathType container $mongod_path)) {
+	    	ErrorOut "MongoDB Binaries do not exist at $mongod_path, try manually installing it..."
+	    }
 
             if(!(Test-Path -pathType container $global:mongodb_dbpath)) {
 		        LogWrite "Database Directory $global:mongodb_dbpath does not exist, creating..."
