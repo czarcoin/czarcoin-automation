@@ -89,7 +89,7 @@ param(
 
 #---------------------------------------------------------[Initialisations]--------------------------------------------------------
 
-$global:script_version="4.2 Release" # Script version
+$global:script_version="4.2" # Script version
 $global:reboot_needed=""
 $global:enableupnp=""
 $global:autoreboot=""
