@@ -89,7 +89,7 @@ param(
 
 #---------------------------------------------------------[Initialisations]--------------------------------------------------------
 
-$global:script_version="4.0 Release" # Script version
+$global:script_version="4.1 Release" # Script version
 $global:reboot_needed=""
 $global:enableupnp=""
 $global:autoreboot=""
@@ -124,7 +124,7 @@ $global:storj_bridge_log_ver="$save_dir\storj_bridge_ver.log"
 
 $mongodb_svc_name="MongoDB"
 $mongodb_log_path=$work_directory + '\mongodb'
-$mongodb_log='' + $mongodb_log_path + '\' + 'mongodb.log'; #Default: runas overwrites this variable
+$mongodb_log=$mongodb_log_path + '\' + 'mongodb.log'; #Default: runas overwrites this variable
 
 $nodejs_ver="4" #make sure to reference Major Branch Version (Default: 4)
 
@@ -767,6 +767,16 @@ function MongoDBCheck() {
 
  	        if(!(Test-Path -pathType container $save_dir)) {
 		        ErrorOut "Log Directory $save_dir does not exist"
+	        }
+
+            if(!(Test-Path -pathType container $mongodb_log_path)) {
+		        LogWrite "Log Directory $mongodb_log_path does not exist, creating..."
+
+                New-Item $mongodb_log_path -type directory -force | Out-Null
+            
+                if(!(Test-Path -pathType container $mongodb_log_path)) {
+		            ErrorOut "Log Directory $mongodb_log_path failed to create, try it manually..."
+	            }
 	        }
 
             $Arguments="--install "
