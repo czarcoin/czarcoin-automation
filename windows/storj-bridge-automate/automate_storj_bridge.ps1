@@ -28,10 +28,13 @@
   -enableupnp - [optional] Enables UPNP
   -nosvc - [optional] Prevents storj-bridge from being installed as a service
   -svcname [name] - [optional] Uses this name as the service to install or remove - storj-bridge is default
-  -removesvc - [optional] Removes storjshare as a service (see the config section in the script to customize)
+  -removesvc - [optional] Removes storj-bridge as a service (see the config section in the script to customize)
   -runas - [optional] Runs the script as a service account
     -username username [required] Username of the account
     -password 'password' [required] Password of the account
+   -noautoupdate
+     -howoften - [optional] Days to check for updates (Default: Every day)
+     -checktime - [optional] Time to check for updates (Default: 3:00am Local Time)
   -update - [optional] Performs an update only function and skips the rest
 
 .OUTPUTS
@@ -69,6 +72,15 @@ param(
     [STRING]$password,
 
     [Parameter(Mandatory=$false)]
+    [SWITCH]$noautoupdate,
+
+    [Parameter(Mandatory=$false,ValueFromPipelineByPropertyName=$true)]
+    [STRING]$howoften,
+
+    [Parameter(Mandatory=$false,ValueFromPipelineByPropertyName=$true)]
+    [STRING]$checktime,
+
+    [Parameter(Mandatory=$false)]
     [SWITCH]$update,
 
     [parameter(Mandatory=$false,ValueFromRemainingArguments=$true)]
@@ -77,12 +89,12 @@ param(
 
 #---------------------------------------------------------[Initialisations]--------------------------------------------------------
 
-$global:script_version="3.6 Release" # Script version
+$global:script_version="4.0 Release" # Script version
 $global:reboot_needed=""
 $global:enableupnp=""
 $global:autoreboot=""
 $global:nosvc=""
-$global:svcname=""
+$global:svcname="storj-bridge"
 $global:runas=""
 $global:username=""
 $global:password=""
@@ -102,12 +114,17 @@ $global:storj_brige_wa=$global:npm_path + "node_modules\storj-bridge"
 
 $environment="production" # change to development if non-production (changes the config file name)  Default: production
 $windows_env=$env:windir
-$save_dir='' + $windows_env + '\Temp\storj\installs' # (Default: %WINDIR%\Temp\storj\bridge)
-$log_path='' + $windows_env + '\Temp\storj\bridge' # (Default: %WINDIR%\Temp\storj\bridge)
-$log_file=$save_dir + '\' + 'automate_storj_bridge.log'; #outputs everything to a file if -silent is used, instead of the console
+$work_directory='' + $windows_env + '\Temp\storj'
+$save_dir=$work_directory + '\installs'
+$storj_bridge_install_log_path=$save_dir
+$storj_bridge_install_log_file=$storj_bridge_install_log_path + '\automate_storj_bridge.log';
+$storj_bridge_log_path=$work_directory + '\bridge'
+$global:storj_bridge_log="$storj_bridge_log_path\$global:svcname.log"
+$global:storj_bridge_log_ver="$save_dir\storj_bridge_ver.log"
 
 $mongodb_svc_name="MongoDB"
-$mongodb_log='' + $save_dir + '\' + 'mongodb.log'; #Default: runas overwrites this variable
+$mongodb_log_path=$work_directory + '\mongodb'
+$mongodb_log='' + $mongodb_log_path + '\' + 'mongodb.log'; #Default: runas overwrites this variable
 
 $nodejs_ver="4" #make sure to reference Major Branch Version (Default: 4)
 
@@ -125,9 +142,6 @@ $nssm_ver="2.24" # (Default: 2.24)
 $nssm_location="$windows_env\System32" # Default windows directory
 $nssm_bin='' + $nssm_location + '\' + "nssm.exe" # (Default: %WINDIR%\System32\nssm.exe)
 
-$stor_bridge_svcname="storj-bridge"
-$storj_bridge_log="$log_path\$stor_bridge_svcname.log"
-
 $error_success=0  #this is success
 $error_invalid_parameter=87 #this is failiure, invalid parameters referenced
 $error_install_failure=1603 #this is failure, A fatal error occured during installation (default error)
@@ -142,13 +156,21 @@ $automated_script_path=$automated_script_path + '\'
 
 function handleParameters() {
 
-    if(!(Test-Path -pathType container $log_path)) {
-        New-Item $log_path -type directory -force | Out-Null
+    if(!(Test-Path -pathType container $storj_bridge_install_log_path)) {
+        New-Item $storj_bridge_install_log_path -type directory -force | Out-Null
     }
 
-    if(!(Test-Path -pathType container $log_path)) {
-		ErrorOut "Log Directory $log_path failed to create, try it manually..."
+    if(!(Test-Path -pathType container $storj_bridge_install_log_path)) {
+		ErrorOut "Log Directory $storj_bridge_install_log_path failed to create, try it manually..."
 	}
+
+    if(!(Test-Path -pathType container $storj_bridge_log_path)) {
+        New-Item $storj_bridge_log_path -type directory -force | Out-Null
+    }
+
+    if(!(Test-Path -pathType container$storj_bridge_log_path)) {
+	ErrorOut "Log Directory $storj_bridge_log_path failed to create, try it manually..."
+    }
 
     if(!(Test-Path -pathType container $save_dir)) {
         New-Item $save_dir -type directory -force | Out-Null
@@ -159,17 +181,12 @@ function handleParameters() {
 	}
 
     if($silent) {
-        LogWrite "Logging to file $log_file"
+        LogWrite "Logging to file $storj_bridge_install_log_file"
     }
     else
     {
         $message="Logging to console"
         LogWrite $message
-    }
-
-    if($autoreboot) {
-        LogWrite "Will auto-reboot if needed"
-        $global:autoreboot="true"
     }
 
     if ($runas) {
@@ -222,15 +239,50 @@ function handleParameters() {
         }
 
         if(!($svcname)) {
-            $global:svcname="$stor_bridge_svcname"
+            $global:svcname="$global:svcname"
         } else {
             $global:svcname="$svcname"
         }
 
+        $global:storj_bridge_log="$storj_bridge_log_path\$global:svcname.log"
+        $global:storj_bridge_log_ver="$save_dir\storj_bridge_ver.log"
+
         if ($removesvc) {
             $global:removesvc="true"
+
+                        if(!($svcname)) {
+                $global:svcname="$storshare_svcname"
+            } else {
+                $global:svcname="$svcname"
+            }
+
+            $global:storj_bridge_log="$storj_bridge_log_path\$global:svcname.log"
+            $global:storj_bridge_log_ver="$save_dir\storj_bridge_ver.log"
         }
     }
+
+    if($autoreboot) {
+        LogWrite "Will auto-reboot if needed"
+        $global:autoreboot="true"
+    }
+
+        if($noautoupdate) {
+            $global:noautoupdate="true"
+        } else {
+            if(!($howoften)) {
+                $global:howoften=$global:howoften
+            } else {
+                $global:howoften=$howoften
+            }
+
+            if(!($checktime)) {
+                $global:checktime=$global:checktime
+            } else {
+                $global:checktime=$checktime
+            }
+
+            LogWrite -Color Cyan "Auto-update set to happen every $global:howoften day(s) at $global:checktime"
+        }
 
     #checks for unknown/invalid parameters referenced
     if ($other_args) {
@@ -243,21 +295,18 @@ Function LogWrite([string]$logstring,[string]$color) {
     $logmessage="["+$LogTime+"] "+$logstring
     if($silent) {
         if($logstring) {
-            if(!(Test-Path -pathType container $log_path)) {
-
-                New-Item $log_path -type directory -force | Out-Null
-
-                if(!(Test-Path -pathType container $log_path)) {
-		            ErrorOut "Log Directory $log_path failed to create, try it manually..."
-	            }
+            if(!(Test-Path -pathType container $storj_bridge_install_log_path)) {
+                New-Item $storj_bridge_install_log_path -type directory -force | Out-Null
+                if(!(Test-Path -pathType container $storj_bridge__install_log_path)) {
+		    ErrorOut "Log Directory $storj_bridge_install_log_path failed to create, try it manually..."
 	        }
-            Add-content $log_file -value $logmessage
+	    }
+            Add-content $storj_bridge_install_log_file -value $logmessage
         }
     } else {
         if(!$logstring) {
             $logmessage=$logstring
         }
-
         if($color) {
             write-host -fore $color $logmessage
         } else {
@@ -703,8 +752,8 @@ function MongoDBCheck() {
             $mongod_exe='' + $mongod_path + 'mongod.exe'; #Default: \mongod.exe
 
             if(!(Test-Path -pathType container $mongod_path)) {
-	    	ErrorOut "MongoDB Binaries do not exist at $mongod_path, try manually installing it..."
-	    }
+		        ErrorOut "MongoDB Binaries do not exist at $mongod_path, try manually installing it..."
+	        }
 
             if(!(Test-Path -pathType container $global:mongodb_dbpath)) {
 		        LogWrite "Database Directory $global:mongodb_dbpath does not exist, creating..."
@@ -739,7 +788,7 @@ function MongoDBCheck() {
         }
 
         if($global:runas) {
-            ChangeLogonService -svc_name $mongodb_svc_name -username $global:username -password $global:password
+            ChangeLogonService -svc_name $mongodb_svc_name -username ".\$global:username" -password $global:password
         }
 
 
@@ -1720,7 +1769,7 @@ function storj-bridgeCheck() {
     #write npm logs to log file if in silent mode
     if($silent) {
         LogWrite "npm $Arguments results"
-        Add-content $log_file -value $output
+        Add-content $storj_bridge_install_log_file -value $output
     }
 
     if (!$output.Length -gt 0) {
@@ -1733,7 +1782,7 @@ function storj-bridgeCheck() {
         #write npm logs to log file if in silent mode
         if($silent) {
             LogWrite "npm $Arguments results"
-            Add-content $log_file -value $result
+            Add-content $storj_bridge_install_log_file -value $result
         }
 
         if ($result.Length -gt 0) {
@@ -1752,7 +1801,7 @@ function storj-bridgeCheck() {
         #write npm logs to log file if in silent mode
         if($silent) {
             LogWrite "npm $Arguments results"
-            Add-content $storjshare_cli_install_log_file -value $result
+            Add-content $storj_bridge_install_log_file -value $result
         }
         if ($result.Length -gt 0) {
             LogWrite -color Red "storj-bridge update needed"
@@ -1770,7 +1819,7 @@ function storj-bridgeCheck() {
         #write npm logs to log file if in silent mode
         if($silent) {
             LogWrite "npm $Arguments results"
-            Add-content $log_file -value $result
+            Add-content $storj_bridge_install_log_file -value $result
         }
 
         if ($result.Length -gt 0) {
@@ -1780,25 +1829,42 @@ function storj-bridgeCheck() {
         LogWrite -color Green "storj-bridge Update Completed"
 
         } else {
-            LogWrite -color Green "No update needed for storjshare-bridge"
+            LogWrite -color Green "No update needed for storj-bridge"
         }
 
         LogWrite -color Cyan "Checking storj-bridge version..."
         $Arguments = "list -g storj-bridge"
         $result=(UseNPM $Arguments)
         if ($result.Length -lt 1) {
-            ErrorOut "storjshare-bridge did not complete update successfully...try manually updating it..."
+            ErrorOut "storj-bridge did not complete update successfully...try manually updating it..."
         }
         #write npm logs to log file if in silent mode
         if($silent) {
             LogWrite "npm $Arguments results"
-            Add-content $storjshare_bridge_install_log_file -value $result
+            Add-content $storj_bridge_install_log_file -value $result
         }
 
         $result=$result.Split('@')
         $version = $result[2]
         LogWrite -color Green "storj-bridge Installed Version: $version"
     }
+
+    LogWrite -color Cyan "Checking storj-bridge Version..."
+        <# - Not implemented in storj-bridge
+    LogWrite -color Cyan "Placing version into log file..."
+    if(!(Test-Path -pathType container $save_dir)) {
+    	ErrorOut "Log directory $save_dir does not exist";
+    }
+    $Arguments="/c storj-bridge -V"
+    if($global:runas) {
+        Start-Process "cmd.exe" -Credential $global:credential -WorkingDirectory "$global:npm_path" -ArgumentList $Arguments -RedirectStandardOutput $global:storj_bridge_log_ver -Wait
+    } else {
+        Start-Process "cmd.exe" -ArgumentList $Arguments -RedirectStandardOutput $global:storj_bridge_log_ver -Wait
+    }
+    $timestamp = Get-Date -Format "yyyy-MM-dd HH:MM:ss"
+    Add-Content $global:storj_bridge_log_ver "Timestamp: $timestamp"
+    LogWrite -color Cyan "Version recorded."
+    #>
 
     LogWrite "Checking for storj-bridge Environment Variable..."
     $env:NODE_ENV = [System.Environment]::GetEnvironmentVariable("NODE_ENV","Machine")
@@ -1955,18 +2021,17 @@ function InstallMSI([string]$installer) {
 }
 
 function UseNPM([string]$Arguments) {
-	$filename = 'npm_output.log';
-	$save_path = '' + $save_dir + '\' + $filename;
-
-	$filename_err = 'npm_output_err.log';
-	$save_path_err = '' + $save_dir + '\' + $filename_err;
-	if(!(Test-Path -pathType container $save_dir)) {
-	    ErrorOut "Log directory $save_dir does not exist";
-	}
-
-	if(!(Test-Path -pathType container $global:npm_path)) {
-	    New-Item $global:npm_path -type directory -force | Out-Null
-	}
+    $filename = 'npm_output.log';
+    $save_path = '' + $storj_bridge_install_log_path + '\' + $filename;
+    $filename_err = 'npm_output_err.log';
+    $save_path_err = '' + $storj_bridge_install_log_path + '\' + $filename_err;
+    if(!(Test-Path -pathType container $storj_bridge_install_log_path)) {
+        ErrorOut "Log directory $storj_bridge_install_log_path does not exist";
+    }
+    
+    if(!(Test-Path -pathType container $global:npm_path)) {
+        New-Item $global:npm_path -type directory -force | Out-Null
+    }
 
     if($global:runas) {
         $proc = Start-Process "npm" -Credential $global:credential -WorkingDirectory "$global:npm_path" -ArgumentList $Arguments -RedirectStandardOutput "$save_path" -RedirectStandardError "$save_path_err"
@@ -2104,20 +2169,17 @@ function DisableUPNP() {
 }
 
 function SetUPNP([string]$upnp_set, [string]$Old) {
-	$filename = 'upnp_output.log';
-	$save_path = '' + $save_dir + '\' + $filename;
-
-	if(!(Test-Path -pathType container $save_dir)) {
-	    ErrorOut "Log directory $save_dir does not exist";
-	}
-	
+    $filename = 'upnp_output.log';
+    $save_path = '' + $storj_bridge_install_log_path + '\' + $filename;
+    if(!(Test-Path -pathType container $storj_bridge_install_log_path)) {
+        ErrorOut "Log directory $storj_bridge_install_log_path does not exist";
+    }
     if($Old) {
         if($upnp_set -eq "Yes") {
             $upnp_set_result="enable"
         } else {
             $upnp_set_result="disable"
         }
-
         $Arguments="firewall set service type=upnp mode=$upnp_set_result"
     } else {
         $Arguments="advfirewall firewall set rule group=`"Network Discovery`" new enable=$($upnp_set)"
@@ -2134,13 +2196,10 @@ function SetUPNP([string]$upnp_set, [string]$Old) {
     }
     
     $results=(Get-Content -Path "$save_path") | Where-Object {$_ -like '*Ok*'}
-
     Remove-Item "$save_path"
-    
     if($results.Length -eq 0) {
         return 0
     }
-
     return 1
 }
 
@@ -2183,25 +2242,21 @@ function RemoveService([string]$svc_name) {
 }
 
 function UseNSSM([string]$Arguments) {
-	$filename = 'nssm_output.log';
-	$save_path = '' + $save_dir + '\' + $filename;
-	if(!(Test-Path -pathType container $save_dir)) {
-	    ErrorOut "Save directory $save_dir does not exist";
-	}
-	
+    $filename = 'nssm_output.log';
+    $save_path = '' + $storj_bridge_install_log_path + '\' + $filename;
+    if(!(Test-Path -pathType container $storj_bridge_install_log_path)) {
+        ErrorOut "Save directory $storj_bridge_install_log_path does not exist";
+    }
     if($silent) {
         $proc = Start-Process "nssm" -ArgumentList $Arguments -RedirectStandardOutput "$save_path" -Wait -NoNewWindow
     } else {
         $proc = Start-Process "nssm" -ArgumentList $Arguments -RedirectStandardOutput "$save_path" -Wait
     }
-
     if(!(Test-Path $save_path)) {
         ErrorOut "nssm command $Arguments failed to execute..."
     }
-    
     $results=(Get-Content -Path "$save_path")
     Remove-Item "$save_path"
-    
     return $results
 }
 
@@ -2235,86 +2290,78 @@ function Installnssm([string]$save_location,[string]$arch) {
 }
 
 function nssmCheck([string]$version) {
-
-    if($global:removesvc) {
-        RemoveService $global:svcname
-    }
-
-    if(!($global:update)) {
-        if(!($global:nosvc)) {
+    if(!$global:nosvc) {
+        LogWrite "Checking if NSSM is installed..."
+	if(!(Test-Path $nssm_bin)) {
+            LogWrite "NSSM is not installed."
+            if ([System.IntPtr]::Size -eq 4) {
+                $arch="32-bit"
+                $arch_ver='win32'
+            } else {
+                $arch="64-bit"
+                $arch_ver='win64'
+            }
+	    $filename = 'nssm-' + $version + '.zip';
+	    $save_path = '' + $save_dir + '\' + $filename;
+            $url='https://nssm.cc/release/' + $filename;
+	    if(!(Test-Path -pathType container $save_dir)) {
+	        ErrorOut "Save directory $save_dir does not exist"
+	    }
+            LogWrite "Downloading NSSM $version..."
+            DownloadFile $url $save_path
+            LogWrite "NSSM downloaded"
+            LogWrite "Installing NSSM $version..."
+            Installnssm $save_path $arch_ver
+            LogWrite -color Green "NSSM Installed Successfully"
+        } else {
+             LogWrite -color Green "NSSM already installed"
+        }
+        if(!($global:update)) {
+            LogWrite "Checking for $global:svcname to see if it exists"
             if(!(CheckService $global:svcname)) {
-                LogWrite "Checking if NSSM is installed..."
-	            if(!(Test-Path $nssm_bin)) {
-                    LogWrite "NSSM is not installed."
-                    if ([System.IntPtr]::Size -eq 4) {
-                        $arch="32-bit"
-                        $arch_ver='win32'
+                     LogWrite "Checking if storj-bridge log directory exists..."
+	            if(!(Test-Path -pathType container $storj_bridge_log_path)) {
+	                ErrorOut "storj-bridge log directory $storj_bridge_log_path does not exist, you may want to setup storj-bridge first.";
+	            }
+                    LogWrite "Installing service $global:svcname"
+                    $Arguments="install $global:svcname $global:storj_bridge_bin >> $global:storj_bridge_log"
+                    $results=UseNSSM $Arguments
+                    if(CheckService($global:svcname)) {
+                        LogWrite -color Green "Service $global:svcname Installed Successfully"
                     } else {
-                        $arch="64-bit"
-                        $arch_ver='win64'
+                        ErrorOut "Failed to install service $global:svcname"
+                    }
+                    if($global:runas) {
+                        ChangeLogonService -svc_name $global:svcname -username ".\$global:username" -password $global:password
                     }
 
-	                $filename = 'nssm-' + $version + '.zip';
-	                $save_path = '' + $save_dir + '\' + $filename;
-                    $url='https://nssm.cc/release/' + $filename;
-	                if(!(Test-Path -pathType container $save_dir)) {
-		                ErrorOut "Save directory $save_dir does not exist"
-	                }
-
-                    LogWrite "Downloading NSSM $version..."
-                    DownloadFile $url $save_path
-                    LogWrite "NSSM downloaded"
-
-                    LogWrite "Installing NSSM $version..."
-                    Installnssm $save_path $arch_ver
-
-                    LogWrite -color Green "NSSM Installed Successfully"
-                } else {
-                     LogWrite -color Green "NSSM already installed, skipping"
-                }
-
-                LogWrite "Installing service $global:svcname"
-                $Arguments="install $global:svcname $global:storj_bridge_bin >> $storj_bridge_log"
-                $results=UseNSSM $Arguments
-                if(CheckService($global:svcname)) {
-                    LogWrite -color Green "Service $global:svcname Installed Successfully"
-                } else {
-                    ErrorOut "Failed to install service $global:svcname"
-                }
-
-                #WORKAROUND#
+                #WORKAROUND - Default Working Directory#
                 LogWrite "Setting service $global:svcname default directory to: $global:storj_brige_wa"
                 $Arguments="set $global:svcname AppDirectory $global:storj_brige_wa"
                 $results=UseNSSM $Arguments
-                #WORKAROUND#
+                #WORKAROUND - Default Working Directory#
 
                 ModifyService "$global:svcname" "Automatic"
                 LogWrite "Starting $global:svcname service..."
                 Start-Service $global:svcname -ErrorAction SilentlyContinue
             } else {
-                LogWrite "Service $global:svcname already installed, skipping"
+                LogWrite "Service already exists, skipping..."
                 Start-Service $global:svcname -ErrorAction SilentlyContinue
             }
-
-            if($global:runas) {
-                ChangeLogonService -svc_name $global:svcname -username $global:username -password $global:password
-            }
         } else {
-            LogWrite -color Green "Skipping Service Check/Installation - No Service Parameter passed"
+            LogWrite "Skipping service functions, in update mode"
         }
     } else {
-        LogWrite "Skipping service functions, in update mode"
-        Remove-Item $storj_bridge_log
-        Start-Service -Name $global:svcname -ErrorAction SilentlyContinue
+        LogWrite "Service set to not install, skipping..."
     }
 }
 
 function GetUserEnvironment([string]$env_var) {
 	$filename = 'user_env.log';
-	$save_path = '' + $log_path + '\' + $filename;
+	$save_path = '' + $storj_bridge_install_log_path + '\' + $filename;
 
-	if(!(Test-Path -pathType container $log_path)) {
-	    ErrorOut "Save directory $log_path does not exist";
+	if(!(Test-Path -pathType container $storj_bridge_install_log_path)) {
+	    ErrorOut "Save directory $storj_bridge_install_log_path does not exist";
 	}
 
     $Arguments="/c ECHO $env_var"
@@ -2341,8 +2388,8 @@ param(
     [string[]] $users
     )
     #Get list of currently used SIDs 
-    secedit /export /cfg "$log_path\tempexport.inf"
-    $curSIDs = Select-String "$log_path\tempexport.inf" -Pattern "SeServiceLogonRight" 
+    secedit /export /cfg "$storj_bridge_install_log_path\tempexport.inf"
+    $curSIDs = Select-String "$storj_bridge_install_log_path\tempexport.inf" -Pattern "SeServiceLogonRight" 
     $Sids = $curSIDs.line 
     $sidstring = ""
     foreach($user in $users){
@@ -2355,19 +2402,19 @@ param(
     if($sidstring){
         $newSids = $sids + $sidstring
         LogWrite "New Sids: $newSids"
-        $tempinf = Get-Content "$log_path\tempexport.inf"
+        $tempinf = Get-Content "$storj_bridge_install_log_path\tempexport.inf"
         $tempinf = $tempinf.Replace($Sids,$newSids)
-        Add-Content -Path "$log_path\tempimport.inf" -Value $tempinf
-        secedit /import /db "$log_path\secedit.sdb" /cfg "$log_path\tempimport.inf" 
-        secedit /configure /db "$log_path\secedit.sdb"
+        Add-Content -Path "$storj_bridge_install_log_path\tempimport.inf" -Value $tempinf
+        secedit /import /db "$storj_bridge_install_log_path\secedit.sdb" /cfg "$storj_bridge_install_log_path\tempimport.inf" 
+        secedit /configure /db "$storj_bridge_install_log_path\secedit.sdb"
  
         gpupdate /force 
     }else{
         LogWrite "No new sids, skipping..."
     }
-    del "$log_path\tempimport.inf" -force -ErrorAction SilentlyContinue
-    del "$log_path\secedit.sdb" -force -ErrorAction SilentlyContinue
-    del "$log_path\tempexport.inf" -force
+    del "$storj_bridge_install_log_path\tempimport.inf" -force -ErrorAction SilentlyContinue
+    del "$storj_bridge_install_log_path\secedit.sdb" -force -ErrorAction SilentlyContinue
+    del "$storj_bridge_install_log_path\tempexport.inf" -force
 }
 
 function storj_bridge_checkver([string]$script_ver) {
@@ -2382,19 +2429,14 @@ function storj_bridge_checkver([string]$script_ver) {
 }
 
 function autoupdate($howoften) {
-
     if(!($global:update)) {
-
         Copy-Item "${automated_script_path}automate_storj_bridge.ps1" "$global:npm_path" -force -ErrorAction SilentlyContinue
         LogWrite "Script file copied to $global:npm_path"
-
         if(!($global:noautoupdate)) {
             $Arguments="-NoProfile -NoLogo -Noninteractive -WindowStyle Hidden -ExecutionPolicy Bypass ""${global:npm_path}automate_storj_bridge.ps1"" -silent -update"
             $action = New-ScheduledTaskAction -Execute 'Powershell.exe' -Argument $Arguments
             $trigger =  New-ScheduledTaskTrigger -Daily -At $global:checktime
-
-            Register-ScheduledTask -Action $action -Trigger $trigger -TaskName "storjshare Auto-Update" -Description "Updates storjshare software $howoften at $global:checktime local time" -RunLevel Highest -ErrorAction SilentlyContinue
-            
+            Register-ScheduledTask -Action $action -Trigger $trigger -TaskName "storj-bridge Auto-Update" -Description "Updates storj-bridge software $howoften at $global:checktime local time" -RunLevel Highest -ErrorAction SilentlyContinue
             LogWrite "Scheduled Task Created"
         } else {
             LogWrite "No autoupdate specified skipping"
