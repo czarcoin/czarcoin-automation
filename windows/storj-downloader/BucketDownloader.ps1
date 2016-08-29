@@ -15,10 +15,10 @@ param(
     [STRING]$other_args
  )
 
- $host.ui.RawUI.WindowTitle = 'Storj Downloader';
-
+ $host.ui.RawUI.WindowTitle = 'Storj - Bucket Downloader';
+  
 $files = "C:\Windows\Temp\storj\bucket_downloader\downloads\"
-$tmp="C:\Windows\Temp\storj\bucket_downloader\logs"
+$tmp="C:\Windows\Temp\storj\bucket_downloader\logs\"
 $bucket="" # put your bucket ID here
 $password="" # put your passphrase here
 $b=0
