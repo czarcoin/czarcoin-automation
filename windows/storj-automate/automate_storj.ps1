@@ -717,7 +717,7 @@ function VisualStudioCheck([string]$version, [string]$dl_link) {
 
 function storjCheck() {
     LogWrite "Checking if storj is installed..."
-    $Arguments = "list -g storj"
+    $Arguments = "list -g"
     $output=(UseNPM $Arguments| Where-Object {$_ -like '*storj@*'})
     #write npm logs to log file if in silent mode
     if($silent) {
