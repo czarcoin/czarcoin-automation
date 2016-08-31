@@ -155,7 +155,7 @@ param(
 
 #---------------------------------------------------------[Initialisations]--------------------------------------------------------
 
-$global:script_version="4.8" # Script version
+$global:script_version="4.9" # Script version
 $global:reboot_needed=""
 $global:noupnp=""
 $global:installsvc="true"
@@ -976,7 +976,7 @@ function VisualStudioCheck([string]$version, [string]$dl_link) {
 function storjshare-cliCheck() {
     LogWrite "Checking if storjshare-cli is installed..."
     $Arguments = "list -g"
-    $output=(UseNPM $Arguments| Where-Object {$_ -like '*storjshare-cli*'})
+    $output=(UseNPM $Arguments| Where-Object {$_ -like '*storjshare-cli@*'})
     #write npm logs to log file if in silent mode
     if($silent) {
         LogWrite "npm $Arguments results"
