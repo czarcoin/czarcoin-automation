@@ -155,7 +155,7 @@ param(
 
 #---------------------------------------------------------[Initialisations]--------------------------------------------------------
 
-$global:script_version="4.9" # Script version
+$global:script_version="5.1" # Script version
 $global:reboot_needed=""
 $global:noupnp=""
 $global:installsvc="true"
@@ -975,7 +975,7 @@ function VisualStudioCheck([string]$version, [string]$dl_link) {
 
 function storjshare-cliCheck() {
     LogWrite "Checking if storjshare-cli is installed..."
-    $Arguments = "list -g"
+    $Arguments = "list -g storjshare-cli"
     $output=(UseNPM $Arguments| Where-Object {$_ -like '*storjshare-cli@*'})
     #write npm logs to log file if in silent mode
     if($silent) {
@@ -984,6 +984,35 @@ function storjshare-cliCheck() {
     }
     if (!$output.Length -gt 0) {
         LogWrite "storjshare-cli is not installed."
+
+        LogWrite "Stopping $global:svcname service (if applicable)"
+        Stop-Service $global:svcname -ErrorAction SilentlyContinue | Out-Null
+        $services=Get-Service -Name *storjshare-cli*
+        $services | ForEach-Object{Stop-Service $_.name -ErrorAction SilentlyContinue | Out-Null}
+        if(Test-Path $global:storjshare_cli_log) {
+            LogWrite "Removing Log file: $global:storjshare_cli_log"
+        }
+        if(Test-Path $storjshare_cli_log_path) {
+            LogWrite "Removing Logs files $storjshare_cli_log_path"
+            Remove-Item "$storjshare_cli_log_path\*" -force
+        }
+
+        LogWrite "Checking for old npm data"
+        if(Test-Path "${global:npm_path}etc") {
+            LogWrite "Removing Directory ${global:npm_path}etc"
+            rm -r "${global:npm_path}etc" -force
+        }
+
+        if(Test-Path "${global:npm_path}node_modules") {
+            LogWrite "Removing Directory ${global:npm_path}node_modules"
+            rm -r "${global:npm_path}node_modules" -force
+        }
+
+        if(Test-Path "${global:appdata}npm-cache") {
+            LogWrite "Removing Directory ${global:appdata}npm-cache"
+            rm -r "${global:appdata}npm-cache" -force
+        }
+
         LogWrite "Installing storjshare-cli (latest version released)..."
         $Arguments = "install -g storjshare-cli"
         $result=(UseNPM $Arguments| Where-Object {$_ -like '*ERR!*'})
@@ -1020,6 +1049,23 @@ function storjshare-cliCheck() {
                 LogWrite "Removing Logs files $storjshare_cli_log_path"
                 Remove-Item "$storjshare_cli_log_path\*" -force
             }
+
+            LogWrite "Checking for old npm data"
+            if(Test-Path "${global:npm_path}etc") {
+                LogWrite "Removing Directory ${global:npm_path}etc"
+                rm -r "${global:npm_path}etc" -force
+            }
+
+            if(Test-Path "${global:npm_path}node_modules") {
+                LogWrite "Removing Directory ${global:npm_path}node_modules"
+                rm -r "${global:npm_path}node_modules" -force
+            }
+
+            if(Test-Path "${global:appdata}npm-cache") {
+                LogWrite "Removing Directory ${global:appdata}npm-cache"
+                rm -r "${global:appdata}npm-cache" -force
+            }
+
             $Arguments = "install -g storjshare-cli"
             $result=(UseNPM $Arguments | Where-Object {$_ -like '*ERR!*'})
             if ($result.Length -gt 0) {
