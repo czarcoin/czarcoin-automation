@@ -2,13 +2,9 @@
 #Requires -RunAsAdministrator
 <#
 .SYNOPSIS
-  Automates the management of storjshare-cli for Windows only
+  Automates the management of storjshare-cli for Windows
 .DESCRIPTION
-  Automates the management of storjshare-cli for Windows only
-
-  This checks for pre-req software
-  Then it checks for storjshare-cli
-  Then it updates storjshare-cli
+  Automates the management of storjshare-cli for Windows
 
   Examples:
   To deploy silently use the following command
@@ -59,8 +55,8 @@
     -tunstart [port number] - [optional] Starting port number (Default: 0; random)
     -tunend [port number] - [optional] Ending port number (Default: 0; random)
    -noautoupdate
-        -howoften - [optional] Days to check for updates (Default: Every day)
-        -checktime - [optional] Time to check for updates (Default: 3:00am Local Time)
+     -howoften - [optional] Days to check for updates (Default: Every day)
+     -checktime - [optional] Time to check for updates (Default: 3:00am Local Time)
    -update - [optional] Performs an update only function and skips the rest
 .OUTPUTS
   Return Codes (follows .msi standards) (https://msdn.microsoft.com/en-us/library/windows/desktop/aa376931(v=vs.85).aspx)
@@ -159,7 +155,7 @@ param(
 
 #---------------------------------------------------------[Initialisations]--------------------------------------------------------
 
-$global:script_version="4.5" # Script version
+$global:script_version="5.1" # Script version
 $global:reboot_needed=""
 $global:noupnp=""
 $global:installsvc="true"
@@ -207,7 +203,6 @@ $global:storjshare_cli_log_ver="$save_dir\storjshare_ver.log"
 $nodejs_ver="4" #make sure to reference Major Branch Version (Default: 4)
 
 $python_ver="2" #make sure to reference Major Branch Version (Default: 2)
-$python_path = "C:\Python27\" #make sure ends with \ (Default: C:\Python27\)
 
 $visualstudio_ver="2015" # currently only supports 2015 Edition (Default: 2015)
 $visualstudio_dl="http://go.microsoft.com/fwlink/?LinkID=626924"  #  link to 2015 download   (Default: http://go.microsoft.com/fwlink/?LinkID=626924)
@@ -240,31 +235,29 @@ function handleParameters() {
     }
 
     if(!(Test-Path -pathType container $storjshare_cli_install_log_path)) {
-		ErrorOut "Log Directory $storjshare_cli_install_log_path failed to create, try it manually..."
-	}
+    	ErrorOut "Log Directory $storjshare_cli_install_log_path failed to create, try it manually..."
+    }
 
     if(!(Test-Path -pathType container $storjshare_cli_log_path)) {
         New-Item $storjshare_cli_log_path -type directory -force | Out-Null
     }
 
     if(!(Test-Path -pathType container $storjshare_cli_log_path)) {
-		ErrorOut "Log Directory $storjshare_cli_log_path failed to create, try it manually..."
-	}
+	ErrorOut "Log Directory $storjshare_cli_log_path failed to create, try it manually..."
+    }
 
     if(!(Test-Path -pathType container $save_dir)) {
         New-Item $save_dir -type directory -force | Out-Null
     }
 
     if(!(Test-Path -pathType container $save_dir)) {
-		ErrorOut "Save Directory $save_dir failed to create, try it manually..."
-	}
+	ErrorOut "Save Directory $save_dir failed to create, try it manually..."
+    }
 
     #checks the silent parameter and if true, writes to log instead of console, also ignores pausing
     if($silent) {
         LogWrite "Logging to file $storjshare_cli_install_log_file"
-    }
-    else
-    {
+    } else {
         $message="Logging to console"
         LogWrite $message
     }
@@ -336,6 +329,9 @@ function handleParameters() {
             if(!($storjpassword)) {
                 if($silent) {
                     ErrorOut -code $global:error_invalid_parameter "ERROR: Service Password not specified"
+                } else {
+                    $pass = Read-Host 'Enter the password for storjshare-cli - Press Enter When Done' -AsSecureString
+                    $global:storjpassword=[Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($pass))
                 }
             } else {
                 $global:storjpassword="$storjpassword"
@@ -465,7 +461,7 @@ function handleParameters() {
                 $global:checktime=$checktime
             }
 
-            LogWrite "Auto-update disabled to happen every $global:howoften day(s) at $global:checktime"
+            LogWrite -Color Cyan "Auto-update set to happen every $global:howoften day(s) at $global:checktime"
         }
     }
 
@@ -475,26 +471,23 @@ function handleParameters() {
     }
 }
 
-Function LogWrite([string]$logstring,[string]$color) {
-    $LogTime = Get-Date -Format "MM-dd-yyyy hh:mm:ss"
+function LogWrite([string]$logstring,[string]$color) {
+    $LogTime = Get-Date -Format "MM-dd-yyyy HH:mm:ss"
     $logmessage="["+$LogTime+"] "+$logstring
     if($silent) {
         if($logstring) {
             if(!(Test-Path -pathType container $storjshare_cli_install_log_path)) {
-
                 New-Item $storjshare_cli_install_log_path -type directory -force | Out-Null
-
                 if(!(Test-Path -pathType container $storjshare_cli_install_log_path)) {
-		            ErrorOut "Log Directory $storjshare_cli_install_log_path failed to create, try it manually..."
-	            }
+		    ErrorOut "Log Directory $storjshare_cli_install_log_path failed to create, try it manually..."
 	        }
+	    }
             Add-content $storjshare_cli_install_log_file -value $logmessage
         }
     } else {
         if(!$logstring) {
             $logmessage=$logstring
         }
-
         if($color) {
             write-host -fore $color $logmessage
         } else {
@@ -505,23 +498,21 @@ Function LogWrite([string]$logstring,[string]$color) {
 
 function ErrorOut([string]$message,[int]$code=$error_install_failure) {
     LogWrite -color Red $message
-    
     if($silent) {
     	LogWrite -color Red "Returning Error Code: $code"
     }
-    
     exit $code;
 }
 
 function GitForWindowsCheck() {
     LogWrite "Checking if Git for Windows is installed..."
-    If(!(Get-IsProgramInstalled "Git")) {
+    if(!(Get-IsProgramInstalled "Git")) {
         $url = "https://github.com/git-for-windows/git/releases/latest"
         $request = [System.Net.WebRequest]::Create($url)
         $request.AllowAutoRedirect=$false
         $response = $request.GetResponse()
  
-        if ($response.StatusCode -eq "Found") {
+        if($response.StatusCode -eq "Found") {
             $url = $response.GetResponseHeader("Location")
         } else {
             ErrorOut "Unable to determine latest version for Git for Windows"
@@ -534,33 +525,30 @@ function GitForWindowsCheck() {
         LogWrite "Found Latest Version of Git for Windows - ${version}"
 
         LogWrite "Git for Windows is not installed."
-        if ([System.IntPtr]::Size -eq 4) {
+        if([System.IntPtr]::Size -eq 4) {
             $arch="32-bit"
             $arch_ver='-32-bit'
         } else {
             $arch="64-bit"
             $arch_ver='-64-bit'
         }
-
-	    $filename = 'Git-' + $version + $arch_ver + '.exe';
-	    $save_path = '' + $save_dir + '\' + $filename;
+	$filename = 'Git-' + $version + $arch_ver + '.exe';
+	$save_path = '' + $save_dir + '\' + $filename;
         $url='https://github.com/git-for-windows/git/releases/download/v' + $version + '.windows.1/' + $filename;
-	    if(!(Test-Path -pathType container $save_dir)) {
-		    ErrorOut "Save directory $save_dir does not exist"
-	    }
-
+	if(!(Test-Path -pathType container $save_dir)) {
+	    ErrorOut "Save directory $save_dir does not exist"
+	}
         LogWrite "Downloading Git for Windows ($arch) $version..."
         DownloadFile $url $save_path
         LogWrite "Git for Windows downloaded"
 
-	    LogWrite "Installing Git for Windows $version..."
+	LogWrite "Installing Git for Windows $version..."
         $Arguments = "/SILENT /COMPONENTS=""icons,ext\reg\shellhere,assoc,assoc_sh"""
-	    InstallEXE $save_path $Arguments
+	InstallEXE $save_path $Arguments
         
-        If(!(Get-IsProgramInstalled "Git")) {
+        if(!(Get-IsProgramInstalled "Git")) {
            ErrorOut "Git for Windows did not complete installation successfully...try manually installing it..."
         }
-
         $global:reboot_needed="true"
         LogWrite -color Green "Git for Windows Installed Successfully"
     }
@@ -568,42 +556,34 @@ function GitForWindowsCheck() {
     {
         LogWrite "Git for Windows is already installed."
         LogWrite "Checking version..."
-
         $installed_version = Get-ProgramVersion( "Git" )
         if(!$installed_version) {
             ErrorOut "Git for Windows Version is Unknown - Error"
         }
-
         $url = "https://github.com/git-for-windows/git/releases/latest"
         $request = [System.Net.WebRequest]::Create($url)
         $request.AllowAutoRedirect=$false
         $response = $request.GetResponse()
  
-        if ($response.StatusCode -eq "Found") {
+        if($response.StatusCode -eq "Found") {
             $url = $response.GetResponseHeader("Location")
         } else {
             ErrorOut "Unable to determine latest version for Git for Windows"
         }
-
         $version = $url.Substring(0,$url.Length-".windows.1".Length)
         $pos = $version.IndexOf("v")
         $version = $version.Substring($pos+1)
-
         LogWrite "Found Latest Version of Git for Windows - ${version}"
-
         $result = CompareVersions $installed_version $version
         if($result -eq "-2") {
             ErrorOut "Unable to match Git for Windows version (Installed Version: $installed_version / Requested Version: $version)"
         }
-
-        if($result -eq 0)
-        {
+        if($result -eq 0) {
             LogWrite "Git for Windows is already updated. Skipping..."
         } elseif($result -eq 1) {
             LogWrite "Git for Windows is newer than the recommended version. Skipping..."
         } else {
             LogWrite "Git for Windows is out of date."
-            
             LogWrite -Color Cyan "Git for Windows $installed_version will be updated to $version..."
             if ([System.IntPtr]::Size -eq 4) {
                 $arch="32-bit"
@@ -614,100 +594,82 @@ function GitForWindowsCheck() {
             }
 
     	    $filename = 'Git-' + $version + $arch_ver + '.exe';
-	        $save_path = '' + $save_dir + '\' + $filename;
+	    $save_path = '' + $save_dir + '\' + $filename;
             $url='https://github.com/git-for-windows/git/releases/download/v' + $version + '.windows.1/' + $filename;
-	        if(!(Test-Path -pathType container $save_dir)) {
-		        ErrorOut "Save directory $save_dir does not exist"
-	        }
-
+	    if(!(Test-Path -pathType container $save_dir)) {
+	        ErrorOut "Save directory $save_dir does not exist"
+	    }
             LogWrite "Downloading Git for Windows ($arch) $version..."
             DownloadFile $url $save_path
             LogWrite "Git for Windows downloaded"
 
-	        LogWrite "Installing Git for Windows $version..."
+	    LogWrite "Installing Git for Windows $version..."
             $Arguments = "/SILENT /COMPONENTS=""icons,ext\reg\shellhere,assoc,assoc_sh"""
-	        InstallEXE $save_path $Arguments
+	    InstallEXE $save_path $Arguments
         
-            If(!(Get-IsProgramInstalled "Git")) {
+            if(!(Get-IsProgramInstalled "Git")) {
                 ErrorOut "Git for Windows did not complete installation successfully...try manually updating it..."
             }
-
             $global:reboot_needed="true"
             LogWrite -color Green "Git for Windows Updated Successfully"
             $installed_version = $version           
         }
-
         LogWrite -color Green "Git for Windows Installed Version: $installed_version"
     }
 }
 
 function NodejsCheck([string]$version) {
     LogWrite "Checking if Node.js is installed..."
-    If(!(Get-IsProgramInstalled "Node.js")) {
+    if(!(Get-IsProgramInstalled "Node.js")) {
         LogWrite "Node.js is not installed."
-        if ([System.IntPtr]::Size -eq 4) {
+        if([System.IntPtr]::Size -eq 4) {
             $arch="32-bit"
             $arch_ver='-x86'
         } else {
             $arch="64-bit"
             $arch_ver='-x64'
         }
-
         LogWrite "Gathering Latest Node.js for Major Version ${version}..."
-
         $url = "https://nodejs.org/dist/latest-v${version}.x/"
         $site = Invoke-WebRequest -URI "$url" -UseBasicParsing
-        
         $found=0
         $site.Links | Foreach {
             $url_items = $_.href
-
             if($url_items -like "*${arch_ver}.msi") {
                 $filename=$url_items
                 $found=1
             }
         }
-
         if($found -ne 1) {
             ErrorOut "Unable to gather Node.js Version";
         }
-
         $url="${url}$filename"
         $version = $filename.Substring(0,$filename.Length-"${arch_ver}.msi".Length)
         $pos = $version.IndexOf("v")
         $version = $version.Substring($pos+1)
         LogWrite "Found Latest Version of Node.js - ${version}"
-
-	    $save_path = '' + $save_dir + '\' + $filename;
-	    if(!(Test-Path -pathType container $save_dir)) {
-		    ErrorOut "Save directory $save_dir does not exist";
-	    }
-
+	$save_path = '' + $save_dir + '\' + $filename;
+	if(!(Test-Path -pathType container $save_dir)) {
+	    ErrorOut "Save directory $save_dir does not exist";
+	}
         LogWrite "Downloading Node.js ($arch) $version..."
         DownloadFile $url $save_path
         LogWrite "Node.js downloaded"
-
-	    LogWrite "Installing Node.js $version..."
-	    InstallMSI $save_path
-        
-        If(!(Get-IsProgramInstalled "Node.js")) {
+	LogWrite "Installing Node.js $version..."
+	InstallMSI $save_path
+        if(!(Get-IsProgramInstalled "Node.js")) {
            ErrorOut "Node.js did not complete installation successfully...try manually installing it..."
         }
-
         $global:reboot_needed="true"
         LogWrite -color Green "Node.js Installed Successfully"
-    }
-    else
-    {
+    } else {
         LogWrite "Node.js already installed."
         LogWrite "Checking version..."
-
         $installed_version = Get-ProgramVersion( "Node.js" )
         if(!$version) {
             ErrorOut "Node.js Version is Unknown - Error"
         }
-
-        if ([System.IntPtr]::Size -eq 4) {
+        if([System.IntPtr]::Size -eq 4) {
             $arch="32-bit"
             $arch_ver='-x86'
         } else {
@@ -718,63 +680,49 @@ function NodejsCheck([string]$version) {
         LogWrite "Gathering Latest Node.js for Major Version ${version}..."
         $url = "https://nodejs.org/dist/latest-v${version}.x/"
         $site = Invoke-WebRequest -URI "$url" -UseBasicParsing
-        
         $found=0
         $site.Links | Foreach {
             $url_items = $_.href
-
             if($url_items -like "*${arch_ver}.msi") {
                 $filename=$url_items
                 $found=1
             }
         }
-
         if($found -ne 1) {
             ErrorOut "Unable to gather Node.js Version";
         }
-
         $url="${url}$filename"
         $version = $filename.Substring(0,$filename.Length-"${arch_ver}.msi".Length)
         $pos = $version.IndexOf("v")
         $version = $version.Substring($pos+1)
         LogWrite "Found Latest Version ${version}"
-
         $result = CompareVersions $installed_version $version
         if($result -eq "-2") {
             ErrorOut "Unable to match Node.js version (Installed Version: $installed_version / Requested Version: $version)"
         }
-
-        if($result -eq 0)
-        {
+        if($result -eq 0) {
             LogWrite "Node.js is already updated. Skipping..."
         } elseif($result -eq 1) {
             LogWrite "Node.js is newer than the recommended version. Skipping..."
         } else {
             LogWrite "Node.js is out of date."
             LogWrite -Color Cyan "Node.js $installed_version will be updated to $version..."
-
-	        $save_path = '' + $save_dir + '\' + $filename;
-
-	        if(!(Test-Path -pathType container $save_dir)) {
-		        ErrorOut "Save directory $save_dir does not exist";
-	        }
-
+	    $save_path = '' + $save_dir + '\' + $filename;
+	    if(!(Test-Path -pathType container $save_dir)) {
+	        ErrorOut "Save directory $save_dir does not exist";
+	    }
             LogWrite "Downloading Node.js ($arch) $version..."
             DownloadFile $url $save_path
             LogWrite "Nodejs downloaded"
-
-	        LogWrite "Installing Node.js $version..."
-	        InstallMSI $save_path
-        
-            If(!(Get-IsProgramInstalled "Node.js")) {
+	    LogWrite "Installing Node.js $version..."
+	    InstallMSI $save_path
+            if(!(Get-IsProgramInstalled "Node.js")) {
                ErrorOut "Node.js did not complete installation successfully...try manually updating it..."
             }
-
             $global:reboot_needed="true"
             LogWrite -color Green "Node.js Updated Successfully"
             $installed_version = $version
         }
-
         LogWrite -color Green "Node.js Installed Version: $installed_version"
     }
     LogWrite "Checking for Node.js NPM Environment Path..."
@@ -794,19 +742,17 @@ function NodejsCheck([string]$version) {
 
 function PythonCheck([string]$version) {
     LogWrite "Checking if Python is installed..."
-    If(!(Get-IsProgramInstalled "Python")) {
+    if(!(Get-IsProgramInstalled "Python")) {
         LogWrite "Python is not installed."
-        if ([System.IntPtr]::Size -eq 4) {
+        if([System.IntPtr]::Size -eq 4) {
             $arch="32-bit"
             $arch_ver=''
         } else {
             $arch="64-bit"
             $arch_ver='.amd64'
         }
-
         $url = "https://www.python.org/ftp/python/"
         $site = Invoke-WebRequest -URI "$url" -UseBasicParsing
-        
         $last=-1
         $site.Links | Foreach {
             $url_items = $_.href
@@ -814,84 +760,67 @@ function PythonCheck([string]$version) {
                 $filename=$url_items
                 $filename=$filename.Substring(0,$filename.Length-1)
                 $version_check=$filename.Substring($version.Length+1)
-                
                 if($version_check.IndexOf(".") -gt 0) {
                     $pos = $version_check.IndexOf(".")
                     $get_version_part=$version_check.Substring(0,$pos)
                 } else {
-                     $get_version_part=$version_check
+                    $get_version_part=$version_check
                 }
-
                 if([int]$get_version_part -gt [int]$last) {
                     $last=$get_version_part
                 }
-                
             }
         }
-
         $version="${version}.${last}"
         $last=-1
         $site.Links | Foreach {
             $url_items = $_.href
-            if($url_items -like "${version}.*") {
-                $filename=$url_items
-                $filename=$filename.Substring(0,$filename.Length-1)
-                $version_check=$filename.Substring($version.Length+1)
-                
-                if($version_check.IndexOf(".") -gt 0) {
-                    $pos = $version_check.IndexOf(".")
-                    $get_version_part=$version_check.Substring(0,$pos)
-                } else {
-                     $get_version_part=$version_check
-                }
-
-                if([int]$get_version_part -gt [int]$last) {
-                    $last=$get_version_part
-                }
-                
-            }
-        }
-        $version="${version}.${last}"
-
-	    $filename = 'python-' + $version + $arch_ver + '.msi';
-	    $save_path = '' + $save_dir + '\' + $filename;
-        $url='http://www.python.org/ftp/python/' + $version + '/' + $filename;
-	    if(!(Test-Path -pathType container $save_dir)) {
-		    ErrorOut "Save directory $save_dir does not exist";
+	    if($url_items -like "${version}.*") {
+	        $filename=$url_items
+	        $filename=$filename.Substring(0,$filename.Length-1)
+	        $version_check=$filename.Substring($version.Length+1)
+	        if($version_check.IndexOf(".") -gt 0) {
+	            $pos = $version_check.IndexOf(".")
+	            $get_version_part=$version_check.Substring(0,$pos)
+	        } else {
+	            $get_version_part=$version_check
+	        }
+	        if([int]$get_version_part -gt [int]$last) {
+	            $last=$get_version_part
+	        }
 	    }
-
+        }
+        $version="${version}.${last}"
+        $filename = 'python-' + $version + $arch_ver + '.msi';
+        $save_path = '' + $save_dir + '\' + $filename;
+        $url='http://www.python.org/ftp/python/' + $version + '/' + $filename;
+        if(!(Test-Path -pathType container $save_dir)) {
+            ErrorOut "Save directory $save_dir does not exist";
+        }
         LogWrite "Downloading Python ($arch) $version..."
         DownloadFile $url $save_path
         LogWrite "Python downloaded"
-
-	    LogWrite "Installing Python $version..."
-	    InstallMSI $save_path
-        
-        If(!(Get-IsProgramInstalled "Python")) {
-           ErrorOut "Python did not complete installation successfully...try manually installing it..."
+        LogWrite "Installing Python $version..."
+        InstallMSI $save_path
+        if(!(Get-IsProgramInstalled "Python")) {
+            ErrorOut "Python did not complete installation successfully...try manually installing it..."
         }
-
         $global:reboot_needed="true"
         LogWrite -color Green "Python Installed Successfully"
-    }
-    else
-    {
+        $installed_version=$version
+    } else {
         LogWrite "Python already installed."
         LogWrite "Checking version..."
-
         $installed_version = Get-ProgramVersion( "Python" )
         $installed_version = $installed_version.Substring(0,$installed_version.Length-3)
         if(!$installed_version) {
             ErrorOut "Python Version is Unknown - Error"
         }
-
         if($installed_version.Split(".")[0] -gt "2" -Or $installed_version.Split(".")[0] -lt "2") {
             ErrorOut "Python version not supported.  Please remove all versions of Python and run the script again."
         }
-
         $url = "https://www.python.org/ftp/python/"
         $site = Invoke-WebRequest -URI "$url" -UseBasicParsing
-        
         $last=-1
         $site.Links | Foreach {
             $url_items = $_.href
@@ -899,21 +828,17 @@ function PythonCheck([string]$version) {
                 $filename=$url_items
                 $filename=$filename.Substring(0,$filename.Length-1)
                 $version_check=$filename.Substring($version.Length+1)
-                
                 if($version_check.IndexOf(".") -gt 0) {
                     $pos = $version_check.IndexOf(".")
                     $get_version_part=$version_check.Substring(0,$pos)
                 } else {
                      $get_version_part=$version_check
                 }
-
                 if([int]$get_version_part -gt [int]$last) {
                     $last=$get_version_part
                 }
-                
             }
         }
-
         $version="${version}.${last}"
         $last=-1
         $site.Links | Foreach {
@@ -922,29 +847,23 @@ function PythonCheck([string]$version) {
                 $filename=$url_items
                 $filename=$filename.Substring(0,$filename.Length-1)
                 $version_check=$filename.Substring($version.Length+1)
-                
                 if($version_check.IndexOf(".") -gt 0) {
                     $pos = $version_check.IndexOf(".")
                     $get_version_part=$version_check.Substring(0,$pos)
                 } else {
                      $get_version_part=$version_check
                 }
-
                 if([int]$get_version_part -gt [int]$last) {
                     $last=$get_version_part
                 }
-                
             }
         }
         $version="${version}.${last}"
-
         $result = CompareVersions $installed_version $version
         if($result -eq "-2") {
             ErrorOut "Unable to match Python version (Installed Version: $installed_version / Requested Version: $version)"
         }
-
-        if($result -eq 0)
-        {
+        if($result -eq 0) {
             LogWrite "Python is already updated. Skipping..."
         } elseif($result -eq 1) {
             LogWrite "Python is newer than the recommended version. Skipping..."
@@ -958,37 +877,38 @@ function PythonCheck([string]$version) {
                 $arch="64-bit"
                 $arch_ver='.amd64'
             }
-
-	        $filename = 'python-' + $version + $arch_ver + '.msi';
-	        $save_path = '' + $save_dir + '\' + $filename;
+	    $filename = 'python-' + $version + $arch_ver + '.msi';
+	    $save_path = '' + $save_dir + '\' + $filename;
             $url='http://www.python.org/ftp/python/' + $version + '/' + $filename;
-	        if(!(Test-Path -pathType container $save_dir)) {
-		        ErrorOut "Save directory $save_dir does not exist";
-	        }
-
+	    if(!(Test-Path -pathType container $save_dir)) {
+	        ErrorOut "Save directory $save_dir does not exist";
+	    }
             LogWrite "Downloading Python ($arch) $version..."
             DownloadFile $url $save_path
             LogWrite "Python downloaded"
-
-	        LogWrite "Installing Python $version..."
-	        InstallMSI $save_path
-        
-            If(!(Get-IsProgramInstalled "Python")) {
+	    LogWrite "Installing Python $version..."
+	    InstallMSI $save_path
+            if(!(Get-IsProgramInstalled "Python")) {
                ErrorOut "Python did not complete installation successfully...try manually installing it..."
             }
-
             $global:reboot_needed="true"
             LogWrite -color Green "Python Updated Successfully"
             $installed_version=$version
         }
-
         LogWrite -color Green "Python Installed Version: $installed_version"
     }
-
     LogWrite "Checking for Python Environment Path..."
     $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine")
     $PathasArray=($Env:PATH).split(';')
-    if ($PathasArray -contains $python_path -or $PathAsArray -contains $python_path+'\') {
+    
+    $split_version=$installed_version.split('.')
+    $python_path="C:\Python" + $split_version[0] + $split_version[1] + "\"
+
+    if(!(Test-Path -pathType container $python_path)) {
+        ErrorOut "Save directory $python_path does not exist";
+    }
+    
+    if($PathasArray -contains $python_path -or $PathAsArray -contains $python_path+'\') {
         LogWrite "Python Environment Path $python_path already within System Environment Path, skipping..."
     } else {
         $OldPath=(Get-ItemProperty -Path 'Registry::HKEY_LOCAL_MACHINE\System\CurrentControlSet\Control\Session Manager\Environment' -Name PATH -ErrorAction SilentlyContinue).Path
@@ -997,11 +917,10 @@ function PythonCheck([string]$version) {
         LogWrite "Python Environment Path Added: $python_path"
         $global:reboot_needed="true"
     }
-
     $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine")
     $PathasArray=($Env:PATH).split(';')
     $python_path=$python_path+"Scripts\";
-    if ($PathasArray -contains $python_path -or $PathAsArray -contains $python_path+'\') {
+    if($PathasArray -contains $python_path -or $PathAsArray -contains $python_path+'\') {
         LogWrite "Python Environment Path $python_path already within System Environment Path, skipping..."
     } else {
         $OldPath=(Get-ItemProperty -Path 'Registry::HKEY_LOCAL_MACHINE\System\CurrentControlSet\Control\Session Manager\Environment' -Name PATH -ErrorAction SilentlyContinue).Path
@@ -1015,50 +934,38 @@ function PythonCheck([string]$version) {
 
 function VisualStudioCheck([string]$version, [string]$dl_link) {
     LogWrite "Checking if Visual Studio Community Edition is installed..."
-    If(!(Get-IsProgramInstalled "Microsoft Visual Studio Community")) {
+    if(!(Get-IsProgramInstalled "Microsoft Visual Studio Community")) {
         LogWrite "Visual Studio Community $version Edition is not installed."
         $filename = 'vs_community_ENU.exe';
-	    $save_path = '' + $save_dir + '\' + $filename;
-	    if(!(Test-Path -pathType container $save_dir)) {
-		    ErrorOut "Save directory $save_dir does not exist";
-	    }
-
+	$save_path = '' + $save_dir + '\' + $filename;
+	if(!(Test-Path -pathType container $save_dir)) {
+	    ErrorOut "Save directory $save_dir does not exist";
+	}
         LogWrite "Downloading Visual Studio Community $version Edition..."
         FollowDownloadFile $dl_link $save_path
         LogWrite "Visual Studio Community $version Edition downloaded"
-
-	    LogWrite "Installing Visual Studio Community $version Edition..."
+        LogWrite "Installing Visual Studio Community $version Edition..."
         $Arguments = "/InstallSelectableItems NativeLanguageSupport_Group /NoRestart /Passive"
-	    InstallEXE $save_path $Arguments
-
-        If(!(Get-IsProgramInstalled "Microsoft Visual Studio Community")) {
+	InstallEXE $save_path $Arguments
+        if(!(Get-IsProgramInstalled "Microsoft Visual Studio Community")) {
            ErrorOut "Visual Studio Community $version Edition did not complete installation successfully...try manually installing it..."
         }
-        
         $global:reboot_needed="true"
-
         LogWrite -color Green "Visual Studio Community $version Edition Installed"
-    }
-    else
-    {
+    } else {
         LogWrite "Visual Studio Community $version Edition already installed."
         LogWrite "Checking version..."
-
         $version_check = Get-ProgramVersion( "Microsoft Visual Studio Community" )
         if(!$version_check) {
             ErrorOut "Visual Studio Community Edition Version is Unknown - Error"
         }
-
         LogWrite -color Green "Visual Studio Community $version Edition Installed"
     }
-
     LogWrite "Checking for Visual Studio Community $version Edition Environment Variable..."
     $env:GYP_MSVS_VERSION = [System.Environment]::GetEnvironmentVariable("GYP_MSVS_VERSION","Machine")
-    If ($env:GYP_MSVS_VERSION) {
+    if($env:GYP_MSVS_VERSION) {
         LogWrite "Visual Studio Community $version Edition Environment Variable (GYP_MSVS_VERSION - $env:GYP_MSVS_VERSION) is already set, skipping..."
-    }
-    else
-    {
+    } else {
         [Environment]::SetEnvironmentVariable("GYP_MSVS_VERSION", $version, "Machine")
         $env:GYP_MSVS_VERSION = [System.Environment]::GetEnvironmentVariable("GYP_MSVS_VERSION","Machine")
         LogWrite "Visual Studio Community $version Edition Environment Variable Added: GYP_MSVS_VERSION - $env:GYP_MSVS_VERSION"
@@ -1068,107 +975,144 @@ function VisualStudioCheck([string]$version, [string]$dl_link) {
 
 function storjshare-cliCheck() {
     LogWrite "Checking if storjshare-cli is installed..."
-    $Arguments = "list -g"
-    $output=(UseNPM $Arguments| Where-Object {$_ -like '*storjshare-cli*'})
-
+    $Arguments = "list -g storjshare-cli"
+    $output=(UseNPM $Arguments| Where-Object {$_ -like '*storjshare-cli@*'})
     #write npm logs to log file if in silent mode
     if($silent) {
         LogWrite "npm $Arguments results"
         Add-content $storjshare_cli_install_log_file -value $output
     }
-
     if (!$output.Length -gt 0) {
         LogWrite "storjshare-cli is not installed."
-        LogWrite "Installing storjshare-cli (latest version released)..."
-
-        $Arguments = "install -g storjshare-cli"
-        $result=(UseNPM $Arguments| Where-Object {$_ -like '*ERR!*'})
-
-        #write npm logs to log file if in silent mode
-        if($silent) {
-            LogWrite "npm $Arguments results"
-            Add-content $storjshare_cli_install_log_file -value $result
-        }
-
-        if ($result.Length -gt 0) {
-            ErrorOut "storjshare-cli did not complete installation successfully...try manually installing it..."
-        }
-
-        LogWrite -color Green "storjshare-cli Installed Successfully"
-    }
-    else
-    {
-        LogWrite "storjshare-cli already installed."
 
         LogWrite "Stopping $global:svcname service (if applicable)"
-
         Stop-Service $global:svcname -ErrorAction SilentlyContinue | Out-Null
         $services=Get-Service -Name *storjshare-cli*
         $services | ForEach-Object{Stop-Service $_.name -ErrorAction SilentlyContinue | Out-Null}
-
         if(Test-Path $global:storjshare_cli_log) {
             LogWrite "Removing Log file: $global:storjshare_cli_log"
         }
-
         if(Test-Path $storjshare_cli_log_path) {
             LogWrite "Removing Logs files $storjshare_cli_log_path"
             Remove-Item "$storjshare_cli_log_path\*" -force
         }
 
-        LogWrite -color Cyan "Performing storjshare-cli Update..."
+        LogWrite "Checking for old npm data"
+        if(Test-Path "${global:npm_path}etc") {
+            LogWrite "Removing Directory ${global:npm_path}etc"
+            rm -r "${global:npm_path}etc" -force
+        }
 
-        #$Arguments = "update -g storjshare-cli"
+        if(Test-Path "${global:npm_path}node_modules") {
+            LogWrite "Removing Directory ${global:npm_path}node_modules"
+            rm -r "${global:npm_path}node_modules" -force
+        }
+
+        if(Test-Path "${global:appdata}npm-cache") {
+            LogWrite "Removing Directory ${global:appdata}npm-cache"
+            rm -r "${global:appdata}npm-cache" -force
+        }
+
+        LogWrite "Installing storjshare-cli (latest version released)..."
         $Arguments = "install -g storjshare-cli"
         $result=(UseNPM $Arguments| Where-Object {$_ -like '*ERR!*'})
-
         #write npm logs to log file if in silent mode
         if($silent) {
             LogWrite "npm $Arguments results"
             Add-content $storjshare_cli_install_log_file -value $result
         }
-
+        if($result.Length -gt 0) {
+            ErrorOut "storjshare-cli did not complete installation successfully...try manually installing it..."
+        }
+        LogWrite -color Green "storjshare-cli Installed Successfully"
+    } else {
+        LogWrite -color Green "storjshare-cli already installed."
+        LogWrite "Checking if storjshare-cli update is needed"
+        $Arguments = "outdated -g -depth 1 storjshare-cli"
+        $result=(UseNPM $Arguments)
+        #write npm logs to log file if in silent mode
+        if($silent) {
+            LogWrite "npm $Arguments results"
+            Add-content $storjshare_cli_install_log_file -value $result
+        }
         if ($result.Length -gt 0) {
+            LogWrite -color Red "storjshare-cli update needed"
+            LogWrite -color Cyan "Performing storjshare-cli Update..."
+            LogWrite "Stopping $global:svcname service (if applicable)"
+            Stop-Service $global:svcname -ErrorAction SilentlyContinue | Out-Null
+            $services=Get-Service -Name *storjshare-cli*
+            $services | ForEach-Object{Stop-Service $_.name -ErrorAction SilentlyContinue | Out-Null}
+            if(Test-Path $global:storjshare_cli_log) {
+                LogWrite "Removing Log file: $global:storjshare_cli_log"
+            }
+            if(Test-Path $storjshare_cli_log_path) {
+                LogWrite "Removing Logs files $storjshare_cli_log_path"
+                Remove-Item "$storjshare_cli_log_path\*" -force
+            }
+
+            LogWrite "Checking for old npm data"
+            if(Test-Path "${global:npm_path}etc") {
+                LogWrite "Removing Directory ${global:npm_path}etc"
+                rm -r "${global:npm_path}etc" -force
+            }
+
+            if(Test-Path "${global:npm_path}node_modules") {
+                LogWrite "Removing Directory ${global:npm_path}node_modules"
+                rm -r "${global:npm_path}node_modules" -force
+            }
+
+            if(Test-Path "${global:appdata}npm-cache") {
+                LogWrite "Removing Directory ${global:appdata}npm-cache"
+                rm -r "${global:appdata}npm-cache" -force
+            }
+
+            $Arguments = "install -g storjshare-cli"
+            $result=(UseNPM $Arguments | Where-Object {$_ -like '*ERR!*'})
+            if ($result.Length -gt 0) {
+                ErrorOut "storjshare-cli did not complete update successfully...try manually updating it..."
+            }
+            #write npm logs to log file if in silent mode
+            if($silent) {
+                LogWrite "npm $Arguments results"
+                Add-content $storjshare_cli_install_log_file -value $result
+            }
+            LogWrite -color Green "storjshare-cli Update Completed"
+            LogWrite "Starting storjshare-cli services"
+            $services=Get-Service -Name *storjshare-cli*
+            $services | ForEach-Object{Start-Service -Name $_.name -ErrorAction SilentlyContinue}
+            Start-Service -Name $global:svcname -ErrorAction SilentlyContinue
+            LogWrite -color Green "storjshare-cli services started"
+        } else {
+            LogWrite -color Green "No update needed for storjshare-cli"
+        }
+        LogWrite -color Cyan "Checking storjshare-cli version..."
+        $Arguments = "list -g storjshare-cli"
+        $result=(UseNPM $Arguments)
+        if ($result.Length -lt 1) {
             ErrorOut "storjshare-cli did not complete update successfully...try manually updating it..."
         }
-        
-        LogWrite -color Green "storjshare-cli Update Completed"
-
-        LogWrite -color Cyan "Checking storjshare-cli version..."
-
-        $pos=$output.IndexOf("storjshare-cli@")
-
-        $version = $output.Substring($pos+15)
-        if(!$version) {
-            ErrorOut "storjshare-cli Version is Unknown - Error"
+        #write npm logs to log file if in silent mode
+        if($silent) {
+            LogWrite "npm $Arguments results"
+            Add-content $storjshare_cli_install_log_file -value $result
         }
-
-        $services=Get-Service -Name *storjshare-cli*
-        $services | ForEach-Object{Start-Service -Name $_.name -ErrorAction SilentlyContinue}
-        Start-Service -Name $global:svcname -ErrorAction SilentlyContinue
-
+        $result=$result.Split('@')
+        $version = $result[2]
         LogWrite -color Green "storjshare-cli Installed Version: $version"
     }
-
     LogWrite -color Cyan "Checking storjshare Version..."
-
     LogWrite -color Cyan "Placing version into log file..."
-
-	if(!(Test-Path -pathType container $save_dir)) {
-	    ErrorOut "Log directory $save_dir does not exist";
-	}
-
+    if(!(Test-Path -pathType container $save_dir)) {
+    	ErrorOut "Log directory $save_dir does not exist";
+    }
     $Arguments="/c storjshare -V"
-
     if($global:runas) {
         Start-Process "cmd.exe" -Credential $global:credential -WorkingDirectory "$global:npm_path" -ArgumentList $Arguments -RedirectStandardOutput $global:storjshare_cli_log_ver -Wait
     } else {
         Start-Process "cmd.exe" -ArgumentList $Arguments -RedirectStandardOutput $global:storjshare_cli_log_ver -Wait
     }
-
     $timestamp = Get-Date -Format "yyyy-MM-dd HH:MM:ss"
-
     Add-Content $global:storjshare_cli_log_ver "Timestamp: $timestamp"
-
     LogWrite -color Cyan "Version recorded."
 }
 
@@ -1205,9 +1149,9 @@ function Get-ProgramVersion([string]$program) {
 }
 
 function DownloadFile([string]$url, [string]$targetFile) {
-	if((Test-Path $targetFile)) {
-	    LogWrite "$targetFile exists, using this download";
-	} else {
+    if((Test-Path $targetFile)) {
+        LogWrite "$targetFile exists, using this download";
+    } else {
         $uri = New-Object "System.Uri" "$url"
         $request = [System.Net.HttpWebRequest]::Create($uri)
         $request.set_Timeout(15000) #15 second timeout
@@ -1233,9 +1177,9 @@ function DownloadFile([string]$url, [string]$targetFile) {
 }
 
 function FollowDownloadFile([string]$url, [string]$targetFile) {
-	if((Test-Path $targetFile)) {
-	    LogWrite "$targetFile exists, using this download";
-	} else {
+    if((Test-Path $targetFile)) {
+        LogWrite "$targetFile exists, using this download";
+    } else {
         $webclient = New-Object System.Net.WebClient
         $webclient.DownloadFile($url,$targetFile)
     }
@@ -1251,44 +1195,42 @@ function RemoveLowRiskFiles() {
 }
 
 function InstallEXE([string]$installer, [string]$Arguments) {
-	Unblock-File $installer
-	AddLowRiskFiles
+    Unblock-File $installer
+    AddLowRiskFiles
     if($silent) {
-	    Start-Process "`"$installer`"" -ArgumentList $Arguments -Wait -NoNewWindow
+        Start-Process "`"$installer`"" -ArgumentList $Arguments -Wait -NoNewWindow
     } else {
         Start-Process "`"$installer`"" -ArgumentList $Arguments -Wait
     }
-	RemoveLowRiskFiles
+    RemoveLowRiskFiles
 }
 
 function InstallMSI([string]$installer) {
-	$Arguments = @()
-	$Arguments += "/i"
-	$Arguments += "`"$installer`""
-	$Arguments += "ALLUSERS=`"1`""
-	$Arguments += "/passive"
-	$Arguments += "/norestart"
-
+    $Arguments = @()
+    $Arguments += "/i"
+    $Arguments += "`"$installer`""
+    $Arguments += "ALLUSERS=`"1`""
+    $Arguments += "/passive"
+    $Arguments += "/norestart"
     if($silent) {
-	    Start-Process "msiexec.exe" -ArgumentList $Arguments -Wait -NoNewWindow
+        Start-Process "msiexec.exe" -ArgumentList $Arguments -Wait -NoNewWindow
     } else {
         Start-Process "msiexec.exe" -ArgumentList $Arguments -Wait
     }
 }
 
 function UseNPM([string]$Arguments) {
-	$filename = 'npm_output.log';
-	$save_path = '' + $storjshare_cli_install_log_path + '\' + $filename;
-
-	$filename_err = 'npm_output_err.log';
-	$save_path_err = '' + $storjshare_cli_install_log_path + '\' + $filename_err;
-	if(!(Test-Path -pathType container $storjshare_cli_install_log_path)) {
-	    ErrorOut "Log directory $storjshare_cli_install_log_path does not exist";
-	}
-
-	if(!(Test-Path -pathType container $global:npm_path)) {
-	    New-Item $global:npm_path -type directory -force | Out-Null
-	}
+    $filename = 'npm_output.log';
+    $save_path = '' + $storjshare_cli_install_log_path + '\' + $filename;
+    $filename_err = 'npm_output_err.log';
+    $save_path_err = '' + $storjshare_cli_install_log_path + '\' + $filename_err;
+    if(!(Test-Path -pathType container $storjshare_cli_install_log_path)) {
+        ErrorOut "Log directory $storjshare_cli_install_log_path does not exist";
+    }
+    
+    if(!(Test-Path -pathType container $global:npm_path)) {
+        New-Item $global:npm_path -type directory -force | Out-Null
+    }
 
     if($global:runas) {
         $proc = Start-Process "npm" -Credential $global:credential -WorkingDirectory "$global:npm_path" -ArgumentList $Arguments -RedirectStandardOutput "$save_path" -RedirectStandardError "$save_path_err"
@@ -1322,7 +1264,7 @@ function UseNPM([string]$Arguments) {
 }
 
 function CheckRebootNeeded() {
-	if($global:reboot_needed) {
+    if($global:reboot_needed) {
         if($global:autoreboot) {
             LogWrite -color Red "=============================================="
             LogWrite -color Red "Initiating Auto-Reboot in $automatic_restart_timeout seconds"
@@ -1368,27 +1310,19 @@ function ChangeLogonService([string]$svc_name, [string]$username, [string]$passw
 }
 function EnableUPNP() {
     LogWrite -color Cyan "Enabling UPNP..."
-
     #DNS Client
     ModifyService "Dnscache" "Automatic"
-
     #Function Discovery Resource Publication
     ModifyService "FDResPub" "Manual"
-
     #SSDP Discovery
     ModifyService "SSDPSRV" "Manual"
-
     #UPnP Device Host
     ModifyService "upnphost" "Manual"
-
-	$results=SetUPNP "Yes"
-
+    $results=SetUPNP "Yes"
     if($results -eq 0) {
         LogWrite "Attempting Enabling UPNP Old Fashioned Way"
         $results=SetUPNP "Yes" "Old"
-
-        if($results -eq 0)
-        {
+        if($results -eq 0) {
             ErrorOut "Enabling UPNP failed to execute...try manually enabling UPNP..."
         } else {
             LogWrite -color Green "UPNP has been successfully enabled"
@@ -1400,20 +1334,15 @@ function EnableUPNP() {
 
 function DisableUPNP() {
     LogWrite -color Cyan "Disabling UPNP..."
-
     ModifyService "Dnscache" "Automatic"
     ModifyService "FDResPub" "Manual"
     ModifyService "SSDPSRV" "Disabled"
     ModifyService "upnphost" "Disabled"
-
-	$results=SetUPNP "No"
-
+    $results=SetUPNP "No"
     if($results -eq 0) {
         LogWrite "Attempting Enabling UPNP Old Fashioned Way"
         $results=SetUPNP "No" "Old"
-
-        if($results -eq 0)
-        {
+        if($results -eq 0) {
             ErrorOut "Enabling UPNP failed to execute...try manually enabling UPNP..."
         } else {
             LogWrite -color Green "UPNP has been successfully enabled"
@@ -1425,20 +1354,17 @@ function DisableUPNP() {
 }
 
 function SetUPNP([string]$upnp_set, [string]$Old) {
-	$filename = 'upnp_output.log';
-	$save_path = '' + $storjshare_cli_install_log_path + '\' + $filename;
-
-	if(!(Test-Path -pathType container $storjshare_cli_install_log_path)) {
-	    ErrorOut "Log directory $storjshare_cli_install_log_path does not exist";
-	}
-	
+    $filename = 'upnp_output.log';
+    $save_path = '' + $storjshare_cli_install_log_path + '\' + $filename;
+    if(!(Test-Path -pathType container $storjshare_cli_install_log_path)) {
+        ErrorOut "Log directory $storjshare_cli_install_log_path does not exist";
+    }
     if($Old) {
         if($upnp_set -eq "Yes") {
             $upnp_set_result="enable"
         } else {
             $upnp_set_result="disable"
         }
-
         $Arguments="firewall set service type=upnp mode=$upnp_set_result"
     } else {
         $Arguments="advfirewall firewall set rule group=`"Network Discovery`" new enable=$($upnp_set)"
@@ -1455,13 +1381,10 @@ function SetUPNP([string]$upnp_set, [string]$Old) {
     }
     
     $results=(Get-Content -Path "$save_path") | Where-Object {$_ -like '*Ok*'}
-
     Remove-Item "$save_path"
-    
     if($results.Length -eq 0) {
         return 0
     }
-
     return 1
 }
 
@@ -1504,51 +1427,43 @@ function RemoveService([string]$svc_name) {
 }
 
 function UseNSSM([string]$Arguments) {
-	$filename = 'nssm_output.log';
-	$save_path = '' + $storjshare_cli_install_log_path + '\' + $filename;
-	if(!(Test-Path -pathType container $storjshare_cli_install_log_path)) {
-	    ErrorOut "Save directory $storjshare_cli_install_log_path does not exist";
-	}
-	
+    $filename = 'nssm_output.log';
+    $save_path = '' + $storjshare_cli_install_log_path + '\' + $filename;
+    if(!(Test-Path -pathType container $storjshare_cli_install_log_path)) {
+        ErrorOut "Save directory $storjshare_cli_install_log_path does not exist";
+    }
     if($silent) {
         $proc = Start-Process "nssm" -ArgumentList $Arguments -RedirectStandardOutput "$save_path" -Wait -NoNewWindow
     } else {
         $proc = Start-Process "nssm" -ArgumentList $Arguments -RedirectStandardOutput "$save_path" -Wait
     }
-
     if(!(Test-Path $save_path)) {
         ErrorOut "nssm command $Arguments failed to execute..."
     }
-    
     $results=(Get-Content -Path "$save_path")
     Remove-Item "$save_path"
-    
     return $results
 }
 
 function Installnssm([string]$save_location,[string]$arch) {
     if(Test-Path $save_location) {
         LogWrite "Checking for $save_location"
-
         $filename=Split-Path $save_location -leaf
         $filename=$filename.Substring(0,$filename.Length-4)
         $extracted_folder="$save_dir\$filename"
         if(Test-Path -pathType container $extracted_folder) {
-		    LogWrite "Skipping extraction...extracted folder already exists"
-	    } else {
+	    LogWrite "Skipping extraction...extracted folder already exists"
+	} else {
             LogWrite "Extracting NSSM zip"
             Add-Type -assembly "system.io.compression.filesystem"
             [io.compression.zipfile]::ExtractToDirectory($save_location, $save_dir)
             LogWrite "Extracted NSSM successfully"
         }
-
         LogWrite "Placing NSSM into $nssm_location"
         Copy-Item "$extracted_folder\$arch\nssm.exe" "$nssm_location"
-
         if(!(Test-Path "$nssm_location\nssm.exe")) {
             ErrorOut "Failed to place NSSM at $nssm_location"
         }
-
         LogWrite "NSSM Placed Successfully"
     } else {
         ErrorOut "NSSM installation file does not exist at: $save_location"
@@ -1558,8 +1473,7 @@ function Installnssm([string]$save_location,[string]$arch) {
 function nssmCheck([string]$version) {
     if($global:installsvc -or $global:removesvc) {
         LogWrite "Checking if NSSM is installed..."
-
-	    if(!(Test-Path $nssm_bin)) {
+	if(!(Test-Path $nssm_bin)) {
             LogWrite "NSSM is not installed."
             if ([System.IntPtr]::Size -eq 4) {
                 $arch="32-bit"
@@ -1568,47 +1482,33 @@ function nssmCheck([string]$version) {
                 $arch="64-bit"
                 $arch_ver='win64'
             }
-
-	        $filename = 'nssm-' + $version + '.zip';
-	        $save_path = '' + $save_dir + '\' + $filename;
+	    $filename = 'nssm-' + $version + '.zip';
+	    $save_path = '' + $save_dir + '\' + $filename;
             $url='https://nssm.cc/release/' + $filename;
-	        if(!(Test-Path -pathType container $save_dir)) {
-		        ErrorOut "Save directory $save_dir does not exist"
-	        }
-
+	    if(!(Test-Path -pathType container $save_dir)) {
+	        ErrorOut "Save directory $save_dir does not exist"
+	    }
             LogWrite "Downloading NSSM $version..."
             DownloadFile $url $save_path
             LogWrite "NSSM downloaded"
-
             LogWrite "Installing NSSM $version..."
             Installnssm $save_path $arch_ver
-
             LogWrite -color Green "NSSM Installed Successfully"
         } else {
              LogWrite -color Green "NSSM already installed"
         }
-
         if(!($global:update)) {
             LogWrite "Checking for $global:svcname to see if it exists"
-            
             if(!(CheckService $global:svcname)) {
                 if($global:installsvc) {
-
                     LogWrite "Checking if storjshare-cli data directory exists..."
-	                if(!(Test-Path -pathType container $global:datadir)) {
-	                    ErrorOut "sorjshare-cli directory $global:datadir does not exist, you may want to setup storjshare-cli first.";
-	                }
-
+	            if(!(Test-Path -pathType container $global:datadir)) {
+	                ErrorOut "sorjshare-cli directory $global:datadir does not exist, you may want to setup storjshare-cli first.";
+	            }
                     LogWrite "Checking if storjshare-cli log directory exists..."
-	                if(!(Test-Path -pathType container $storjshare_cli_log_path)) {
-	                    ErrorOut "storjshare-cli log directory $storjshare_cli_log_path does not exist, you may want to setup storjshare-cli first.";
-	                }
-
-                    if(!$global:storjpassword) {
-                        $pass = Read-Host 'Enter the password for storjshare-cli - Press Enter When Done' -AsSecureString
-                        $global:storjpassword=[Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($pass))
-                    }
-
+	            if(!(Test-Path -pathType container $storjshare_cli_log_path)) {
+	                ErrorOut "storjshare-cli log directory $storjshare_cli_log_path does not exist, you may want to setup storjshare-cli first.";
+	            }
                     LogWrite "Installing service $global:svcname"
                     $Arguments="install $global:svcname $storjshare_bin start --datadir $global:datadir --password $global:storjpassword >> $global:storjshare_cli_log"
                     $results=UseNSSM $Arguments
@@ -1617,7 +1517,6 @@ function nssmCheck([string]$version) {
                     } else {
                         ErrorOut "Failed to install service $global:svcname"
                     }
-
                     if($global:runas) {
                         ChangeLogonService -svc_name $global:svcname -username ".\$global:username" -password $global:password
                     }
@@ -1636,29 +1535,22 @@ function nssmCheck([string]$version) {
 }
 
 function GetUserEnvironment([string]$env_var) {
-	$filename = 'user_env.log';
-	$save_path = '' + $storjshare_cli_install_log_path + '\' + $filename;
-
-	if(!(Test-Path -pathType container $storjshare_cli_install_log_path)) {
-	    ErrorOut "Save directory $storjshare_cli_install_log_path does not exist";
-	}
-
+    $filename = 'user_env.log';
+    $save_path = '' + $storjshare_cli_install_log_path + '\' + $filename;
+    if(!(Test-Path -pathType container $storjshare_cli_install_log_path)) {
+        ErrorOut "Save directory $storjshare_cli_install_log_path does not exist";
+    }
     $Arguments="/c ECHO $env_var"
-
     if($silent) {
         $proc = Start-Process "cmd.exe" -Credential $global:credential -Workingdirectory "$env:windir\System32" -ArgumentList $Arguments -RedirectStandardOutput "$save_path" -Wait -NoNewWindow
     } else {
         $proc = Start-Process "cmd.exe" -Credential $global:credential -Workingdirectory "$env:windir\System32" -ArgumentList $Arguments -RedirectStandardOutput "$save_path" -Wait
     }
-
     if(!(Test-Path $save_path)) {
         ErrorOut "cmd command $Arguments failed to execute...try manually running it..."
     }
-    
     $results=(Get-Content -Path "$save_path")
-
     Remove-Item "$save_path"
-    
     return $results
 }
 
@@ -1688,7 +1580,7 @@ param(
         secedit /configure /db "$storjshare_cli_install_log_path\secedit.sdb"
  
         gpupdate /force 
-    }else{
+    } else {
         LogWrite "No new sids, skipping..."
     }
     del "$storjshare_cli_install_log_path\tempimport.inf" -force -ErrorAction SilentlyContinue
@@ -1705,39 +1597,32 @@ function storjshare-enterdata($processid, [string] $command) {
 
 function setup-storjshare() {
     if(!($global:update)) {
-	    if(!(Test-Path -pathType container $global:datadir)) {
+        if(!(Test-Path -pathType container $global:datadir)) {
             if($global:autosetup) {
                 if(($global:storjpassword) -AND ($global:datadir)) {
-	                $filename = 'storjshare_output.log';
-	                $save_path = '' + $storjshare_cli_install_log_path + '\' + $filename;
-	                if(!(Test-Path -pathType container $storjshare_cli_install_log_path)) {
-	                    ErrorOut "Save directory $storjshare_cli_install_log_path does not exist";
-	                }
-
+                    $filename = 'storjshare_output.log';
+                    $save_path = '' + $storjshare_cli_install_log_path + '\' + $filename;
+	            if(!(Test-Path -pathType container $storjshare_cli_install_log_path)) {
+                        ErrorOut "Save directory $storjshare_cli_install_log_path does not exist";
+	            }
                     LogWrite "storjshare directory $global:datadir does not exist"
                     LogWrite "Performing storjshare Setup in this directory"
-
                     add-type -AssemblyName microsoft.VisualBasic
                     add-type -AssemblyName System.Windows.Forms
-
                     LogWrite "Starting storjshare key sequence. Please wait for the dialog to close as this may take a couple minutes."
                     Start-Sleep -s 2
-
-                    $Arguments="setup --datadir $global:datadir"
-                    
+                    $Arguments="setup --datadir $global:datadir --password $global:storjpassword"
                     if($global:runas) {
                         $proc = Start-Process "storjshare" -Credential $global:credential -WorkingDirectory "$global:npm_path" -ArgumentList $Arguments -RedirectStandardOutput "$save_path"
                     } else {
                         $proc = Start-Process "storjshare" -ArgumentList $Arguments -RedirectStandardOutput "$save_path"
                     }
-
                     if(!(Test-Path $save_path)) {
                         ErrorOut "storjshare command $Arguments failed to execute..."
                     }
-
                     Start-Sleep -s 3
                     $processstorjshare=Get-Process | Where-Object { $_.MainWindowTitle -like '*\System32\cmd.exe*' } | select -expand id
-
+                    
                     #public ip / hostname (default: 127.0.0.1)
                     storjshare-enterdata -processid $processstorjshare -command "$global:publicaddr"
 
@@ -1783,15 +1668,14 @@ function setup-storjshare() {
                     #Path encrypted files (hit enter given argument)
                     storjshare-enterdata -processid $processstorjshare -command ""
 
-                    #password to protect data (if none entered by user fail)
-                    storjshare-enterdata -processid $processstorjshare -command "$global:storjpassword"
+                    #password to protect data (hit enter given argument)
+                    storjshare-enterdata -processid $processstorjshare -command ""
         
                     $results=(Get-Content -Path "$save_path") | Where-Object {$_ -like '*error*'}
 
                     if($results) {
                         ErrorOut "storjshare command $Arguments failed to execute..."
                     }
-
                     Remove-Item "$save_path"
                 } else {
                     LogWrite "Missing required parameters; skipping setup..."
@@ -1800,29 +1684,24 @@ function setup-storjshare() {
                 LogWrite "Manually going through setup"
                 LogWrite "You will be prompted by storjshare to enter various values"
                 LogWrite -Yellow "Any questions around these values can be answered on https://github.com/Storj/storjshare-cli"
-
-                $Arguments="setup --datadir $global:datadir"
+                $Arguments="setup --datadir $global:datadir --password $global:storjpassword"
                 $proc = Start-Process "storjshare" -ArgumentList $Arguments -Wait
-
                 LogWrite "Completed entering storjshare values...moving on"
             }
-
             LogWrite "Starting $global:svcname service..."
             Start-Service $global:svcname -ErrorAction SilentlyContinue
-        }
-        else
-        {
+        } else {
             LogWrite "Skipping storjshare setup; data setup files exist..."
         }
     } else {
         LogWrite "Skipping setup check, in update mode..."
         $services=Get-Service -Name *storjshare-cli*
-        $services | ForEach-Object{
+        $services | ForEach-Object {
             $service=$_.name
             Remove-Item "$storjshare_cli_log_path\$service.log"
             Start-Service -Name $service -ErrorAction SilentlyContinue
         }
-        LogWrite "Re-started services"
+        LogWrite "Started services"
     }
 }
 
@@ -1838,19 +1717,14 @@ function storjshare_cli_checkver([string]$script_ver) {
 }
 
 function autoupdate($howoften) {
-
     if(!($global:update)) {
-
         Copy-Item "${automated_script_path}automate_storj_cli.ps1" "$global:npm_path" -force -ErrorAction SilentlyContinue
         LogWrite "Script file copied to $global:npm_path"
-
         if(!($global:noautoupdate)) {
             $Arguments="-NoProfile -NoLogo -Noninteractive -WindowStyle Hidden -ExecutionPolicy Bypass ""${global:npm_path}automate_storj_cli.ps1"" -silent -update"
             $action = New-ScheduledTaskAction -Execute 'Powershell.exe' -Argument $Arguments
             $trigger =  New-ScheduledTaskTrigger -Daily -At $global:checktime
-
             Register-ScheduledTask -Action $action -Trigger $trigger -TaskName "storjshare Auto-Update" -Description "Updates storjshare software $howoften at $global:checktime local time" -RunLevel Highest -ErrorAction SilentlyContinue
-            
             LogWrite "Scheduled Task Created"
         } else {
             LogWrite "No autoupdate specified skipping"

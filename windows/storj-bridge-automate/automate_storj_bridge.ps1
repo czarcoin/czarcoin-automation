@@ -2,13 +2,9 @@
 #Requires -RunAsAdministrator
 <#
 .SYNOPSIS
-  Automates the management of storj-bridge for Windows only
+  Automates the management of storj-bridge for Windows
 .DESCRIPTION
-  Automates the management of storj-bridge for Windows only
-
-  This checks for pre-req software
-  Then it checks for storj-bridge
-  Then it updates storj-bridge
+  Automates the management of storj-bridge for Windows
 
   Examples:
   To deploy silently use the following command
@@ -32,15 +28,17 @@
   -enableupnp - [optional] Enables UPNP
   -nosvc - [optional] Prevents storj-bridge from being installed as a service
   -svcname [name] - [optional] Uses this name as the service to install or remove - storj-bridge is default
-  -removesvc - [optional] Removes storjshare as a service (see the config section in the script to customize)
+  -removesvc - [optional] Removes storj-bridge as a service (see the config section in the script to customize)
   -runas - [optional] Runs the script as a service account
     -username username [required] Username of the account
     -password 'password' [required] Password of the account
-   -update - [optional] Performs an update only function and skips the rest
+   -noautoupdate
+     -howoften - [optional] Days to check for updates (Default: Every day)
+     -checktime - [optional] Time to check for updates (Default: 3:00am Local Time)
+  -update - [optional] Performs an update only function and skips the rest
 
 .OUTPUTS
   Return Codes (follows .msi standards) (https://msdn.microsoft.com/en-us/library/windows/desktop/aa376931(v=vs.85).aspx)
-
 #>
 
 #-----------------------------------------------------------[Parameters]------------------------------------------------------------
@@ -74,6 +72,15 @@ param(
     [STRING]$password,
 
     [Parameter(Mandatory=$false)]
+    [SWITCH]$noautoupdate,
+
+    [Parameter(Mandatory=$false,ValueFromPipelineByPropertyName=$true)]
+    [STRING]$howoften,
+
+    [Parameter(Mandatory=$false,ValueFromPipelineByPropertyName=$true)]
+    [STRING]$checktime,
+
+    [Parameter(Mandatory=$false)]
     [SWITCH]$update,
 
     [parameter(Mandatory=$false,ValueFromRemainingArguments=$true)]
@@ -82,12 +89,12 @@ param(
 
 #---------------------------------------------------------[Initialisations]--------------------------------------------------------
 
-$global:script_version="3.3 Release" # Script version
+$global:script_version="4.2" # Script version
 $global:reboot_needed=""
 $global:enableupnp=""
-$global:autoreoot=""
+$global:autoreboot=""
 $global:nosvc=""
-$global:svcname=""
+$global:svcname="storj-bridge"
 $global:runas=""
 $global:username=""
 $global:password=""
@@ -107,25 +114,21 @@ $global:storj_brige_wa=$global:npm_path + "node_modules\storj-bridge"
 
 $environment="production" # change to development if non-production (changes the config file name)  Default: production
 $windows_env=$env:windir
-$save_dir='' + $windows_env + '\Temp\storj\installs' # (Default: %WINDIR%\Temp\storj\bridge)
-$log_path='' + $windows_env + '\Temp\storj\bridge' # (Default: %WINDIR%\Temp\storj\bridge)
-$log_file=$save_dir + '\' + 'automate_storj_bridge.log'; #outputs everything to a file if -silent is used, instead of the console
+$work_directory='' + $windows_env + '\Temp\storj'
+$save_dir=$work_directory + '\installs'
+$storj_bridge_install_log_path=$save_dir
+$storj_bridge_install_log_file=$storj_bridge_install_log_path + '\automate_storj_bridge.log';
+$storj_bridge_log_path=$work_directory + '\bridge'
+$global:storj_bridge_log="$storj_bridge_log_path\$global:svcname.log"
+$global:storj_bridge_log_ver="$save_dir\storj_bridge_ver.log"
 
-$mongodb_ver="3.2.7" # (Default: 3.2.7)
 $mongodb_svc_name="MongoDB"
-$mongod_path='' + $env:programfiles + '\MongoDB\Server\3.2\bin\' #Default %PROGRAMFILES%\MongoDB\Server\3.2\bin\
-$mongod_exe='' + $mongod_path + 'mongod.exe'; #Default: \mongod.exe
-$mongodb_log='' + $save_dir + '\' + 'mongodb.log'; #Default: runas overwrites this variable
-
-$erlang_ver="19.0" # Default: 19.0
-$erlang_compare_ver="19 (8.0)" # Default: 19 (8.0)
-
-$rabbitmq_ver="3.6.3" # Default: 3.6.2
+$mongodb_log_path=$work_directory + '\mongodb'
+$mongodb_log=$mongodb_log_path + '\' + 'mongodb.log'; #Default: runas overwrites this variable
 
 $nodejs_ver="4" #make sure to reference Major Branch Version (Default: 4)
 
 $python_ver="2" #make sure to reference Major Branch Version (Default: 2)
-$python_path = "C:\Python27\" #make sure ends with \ (Default: C:\Python27\)
 
 $visualstudio_ver="2015" # currently only supports 2015 Edition (Default: 2015)
 $visualstudio_dl="http://go.microsoft.com/fwlink/?LinkID=626924"  #  link to 2015 download   (Default: http://go.microsoft.com/fwlink/?LinkID=626924)
@@ -138,9 +141,6 @@ $LowRiskFileTypes = ".exe"
 $nssm_ver="2.24" # (Default: 2.24)
 $nssm_location="$windows_env\System32" # Default windows directory
 $nssm_bin='' + $nssm_location + '\' + "nssm.exe" # (Default: %WINDIR%\System32\nssm.exe)
-
-$stor_bridge_svcname="storj-bridge"
-$storj_bridge_log="$log_path\$stor_bridge_svcname.log"
 
 $error_success=0  #this is success
 $error_invalid_parameter=87 #this is failiure, invalid parameters referenced
@@ -156,13 +156,21 @@ $automated_script_path=$automated_script_path + '\'
 
 function handleParameters() {
 
-    if(!(Test-Path -pathType container $log_path)) {
-        New-Item $log_path -type directory -force | Out-Null
+    if(!(Test-Path -pathType container $storj_bridge_install_log_path)) {
+        New-Item $storj_bridge_install_log_path -type directory -force | Out-Null
     }
 
-    if(!(Test-Path -pathType container $log_path)) {
-		ErrorOut "Log Directory $log_path failed to create, try it manually..."
+    if(!(Test-Path -pathType container $storj_bridge_install_log_path)) {
+		ErrorOut "Log Directory $storj_bridge_install_log_path failed to create, try it manually..."
 	}
+
+    if(!(Test-Path -pathType container $storj_bridge_log_path)) {
+        New-Item $storj_bridge_log_path -type directory -force | Out-Null
+    }
+
+    if(!(Test-Path -pathType container$storj_bridge_log_path)) {
+	ErrorOut "Log Directory $storj_bridge_log_path failed to create, try it manually..."
+    }
 
     if(!(Test-Path -pathType container $save_dir)) {
         New-Item $save_dir -type directory -force | Out-Null
@@ -173,17 +181,12 @@ function handleParameters() {
 	}
 
     if($silent) {
-        LogWrite "Logging to file $log_file"
+        LogWrite "Logging to file $storj_bridge_install_log_file"
     }
     else
     {
         $message="Logging to console"
         LogWrite $message
-    }
-
-    if($autoreboot) {
-        LogWrite "Will auto-reboot if needed"
-        $global:autoreboot="true"
     }
 
     if ($runas) {
@@ -236,15 +239,50 @@ function handleParameters() {
         }
 
         if(!($svcname)) {
-            $global:svcname="$stor_bridge_svcname"
+            $global:svcname="$global:svcname"
         } else {
             $global:svcname="$svcname"
         }
 
+        $global:storj_bridge_log="$storj_bridge_log_path\$global:svcname.log"
+        $global:storj_bridge_log_ver="$save_dir\storj_bridge_ver.log"
+
         if ($removesvc) {
             $global:removesvc="true"
+
+                        if(!($svcname)) {
+                $global:svcname="$storshare_svcname"
+            } else {
+                $global:svcname="$svcname"
+            }
+
+            $global:storj_bridge_log="$storj_bridge_log_path\$global:svcname.log"
+            $global:storj_bridge_log_ver="$save_dir\storj_bridge_ver.log"
         }
     }
+
+    if($autoreboot) {
+        LogWrite "Will auto-reboot if needed"
+        $global:autoreboot="true"
+    }
+
+        if($noautoupdate) {
+            $global:noautoupdate="true"
+        } else {
+            if(!($howoften)) {
+                $global:howoften=$global:howoften
+            } else {
+                $global:howoften=$howoften
+            }
+
+            if(!($checktime)) {
+                $global:checktime=$global:checktime
+            } else {
+                $global:checktime=$checktime
+            }
+
+            LogWrite -Color Cyan "Auto-update set to happen every $global:howoften day(s) at $global:checktime"
+        }
 
     #checks for unknown/invalid parameters referenced
     if ($other_args) {
@@ -253,25 +291,22 @@ function handleParameters() {
 }
 
 Function LogWrite([string]$logstring,[string]$color) {
-    $LogTime = Get-Date -Format "MM-dd-yyyy hh:mm:ss"
+    $LogTime = Get-Date -Format "MM-dd-yyyy HH:mm:ss"
     $logmessage="["+$LogTime+"] "+$logstring
     if($silent) {
         if($logstring) {
-            if(!(Test-Path -pathType container $log_path)) {
-
-                New-Item $log_path -type directory -force | Out-Null
-
-                if(!(Test-Path -pathType container $log_path)) {
-		            ErrorOut "Log Directory $log_path failed to create, try it manually..."
-	            }
+            if(!(Test-Path -pathType container $storj_bridge_install_log_path)) {
+                New-Item $storj_bridge_install_log_path -type directory -force | Out-Null
+                if(!(Test-Path -pathType container $storj_bridge__install_log_path)) {
+		    ErrorOut "Log Directory $storj_bridge_install_log_path failed to create, try it manually..."
 	        }
-            Add-content $log_file -value $logmessage
+	    }
+            Add-content $storj_bridge_install_log_file -value $logmessage
         }
     } else {
         if(!$logstring) {
             $logmessage=$logstring
         }
-
         if($color) {
             write-host -fore $color $logmessage
         } else {
@@ -290,21 +325,176 @@ function ErrorOut([string]$message,[int]$code=$error_install_failure) {
     exit $code;
 }
 
-function MongoDBCheck([string]$version) {
+function MongoDBCheck() {
     LogWrite "Checking if MongoDB is installed..."
     If(!(Get-IsProgramInstalled "MongoDB")) {
-        LogWrite "MongoDB $version is not installed."
+        LogWrite "MongoDB is not installed."
         if ([System.IntPtr]::Size -eq 4) {
             $arch="32-bit"
-            $arch_ver='-i386'
+            $arch_ver='i386'
+            $begin_filename="http://downloads.mongodb.org/win32/mongodb-win32-i386-"
         } else {
             $arch="64-bit"
-            $arch_ver='-x86_64-2008plus'
+            $arch_ver='x86_64-2008plus-ssl'
+            $begin_filename="http://downloads.mongodb.org/win32/mongodb-win32-x86_64-2008plus-ssl-"
         }
 
-	    $filename = 'mongodb-win32' + $arch_ver + '-' + $version + '-signed.msi';
+        LogWrite "Checking latest MongoDB version"
+
+        $url = "https://www.mongodb.org/dl/win32/${$arch_ver}"
+        $site = Invoke-WebRequest -URI "$url" -UseBasicParsing
+        
+        $last=-1
+        $site.Links | Foreach {
+            $url_items = $_.href
+
+            if($url_items -like "${begin_filename}*.msi" -AND $url_items -notlike "*-rc*") {
+                $filename=$url_items
+
+                $version_check=$filename.Substring(0,$filename.Length-4)
+                $version_check=$version_check.Substring($begin_filename.Length)
+                
+                $pos=$version_check.IndexOf('-')
+
+                if($pos -gt 0)
+                {
+                    $version_check=$version_check.Substring(0, $pos)
+                }
+
+                if($version_check.Substring(0,1) -contains "v")
+                {
+                    $version_check=$version_check.Substring(1)
+                }
+
+                if($version_check -contains "latest")
+                {
+                    $version_check=""
+                }
+
+                if($version_check.IndexOf(".") -gt 0) {
+                    $pos = $version_check.IndexOf(".")
+                    $get_version_part=$version_check.Substring(0,$pos)
+                } else {
+                     $get_version_part=$version_check
+                }
+
+                if([int]$get_version_part -gt [int]$last) {
+                    $last=$get_version_part
+                }
+            }
+        }
+
+        $begin_filename="${begin_filename}${last}."
+
+        $version="${last}"
+
+        $last=-1
+        $site.Links | Foreach {
+            $url_items = $_.href
+
+            if($url_items -like "${begin_filename}*.msi" -AND $url_items -notlike "*-rc*") {
+                $filename=$url_items
+
+                $version_check=$filename.Substring(0,$filename.Length-4)
+                $version_check=$version_check.Substring($begin_filename.Length)
+                
+                $pos=$version_check.IndexOf('-')
+
+                if($pos -gt 0)
+                {
+                    $version_check=$version_check.Substring(0, $pos)
+                }
+
+                if($version_check.Substring(0,1) -contains "v")
+                {
+                    $version_check=$version_check.Substring(1)
+                }
+
+                if($version_check -contains "latest")
+                {
+                    $version_check=""
+                }
+
+                if($version_check.IndexOf(".") -gt 0) {
+                    $pos = $version_check.IndexOf(".")
+                    $get_version_part=$version_check.Substring(0,$pos)
+                } else {
+                     $get_version_part=$version_check
+                }
+
+                if([int]$get_version_part -gt [int]$last) {
+                    $last=$get_version_part
+                }
+            }
+        }
+
+        $begin_filename="${begin_filename}${last}."
+
+        $version="${version}.${last}"
+
+        $last=-1
+        $site.Links | Foreach {
+            $url_items = $_.href
+
+            if($url_items -like "${begin_filename}*.msi" -AND $url_items -notlike "*-rc*") {
+                $filename=$url_items
+
+                $version_check=$filename.Substring(0,$filename.Length-4)
+                $version_check=$version_check.Substring($begin_filename.Length)
+                
+                $pos=$version_check.IndexOf('-')
+
+                if($pos -gt 0)
+                {
+                    $version_check=$version_check.Substring(0, $pos)
+                }
+
+                if($version_check.Substring(0,1) -contains "v")
+                {
+                    $version_check=$version_check.Substring(1)
+                }
+
+                if($version_check -contains "latest")
+                {
+                    $version_check=""
+                }
+
+                if($version_check.IndexOf(".") -gt 0) {
+                    $pos = $version_check.IndexOf(".")
+                    $get_version_part=$version_check.Substring(0,$pos)
+                } else {
+                     $get_version_part=$version_check
+                }
+
+                if([int]$get_version_part -gt [int]$last) {
+                    $last=$get_version_part
+                }
+            }
+        }
+
+                if($last -ne -1) {
+            $version="${version}.${last}"
+            $begin_filename="otp${arch_ver}_${version}."
+        }
+
+        $found=0
+        $site.Links | Foreach {
+            $url_items = $_.href
+
+            if($url_items -like "*${version}*.msi") {
+                $url=$url_items
+                $pos_check="win32/"
+                $pos=$url.IndexOf($pos_check)
+                $filename=$url.Substring($pos+$pos_check.Length)
+                $found=1
+            }
+        }
+
+        if($found -lt 1) {
+            ErrorOut "DL not found"
+            }
+
 	    $save_path = '' + $save_dir + '\' + $filename;
-        $url='http://downloads.mongodb.org/win32/' + $filename;
 	    if(!(Test-Path -pathType container $save_dir)) {
 		    ErrorOut "Save directory $save_dir does not exist"
 	    }
@@ -333,9 +523,174 @@ function MongoDBCheck([string]$version) {
             ErrorOut "MongoDB Version is Unknown - Error"
         }
 
-        $result = CompareVersions $installed_version $mongodb_ver
+        if ([System.IntPtr]::Size -eq 4) {
+            $arch="32-bit"
+            $arch_ver='i386'
+            $begin_filename="http://downloads.mongodb.org/win32/mongodb-win32-i386-"
+        } else {
+            $arch="64-bit"
+            $arch_ver='x86_64-2008plus-ssl'
+            $begin_filename="http://downloads.mongodb.org/win32/mongodb-win32-x86_64-2008plus-ssl-"
+        }
+
+        LogWrite "Checking latest MongoDB version"
+
+        $url = "https://www.mongodb.org/dl/win32/${$arch_ver}"
+        $site = Invoke-WebRequest -URI "$url" -UseBasicParsing
+        
+        $last=-1
+        $site.Links | Foreach {
+            $url_items = $_.href
+
+            if($url_items -like "${begin_filename}*.msi" -AND $url_items -notlike "*-rc*") {
+                $filename=$url_items
+
+                $version_check=$filename.Substring(0,$filename.Length-4)
+                $version_check=$version_check.Substring($begin_filename.Length)
+                
+                $pos=$version_check.IndexOf('-')
+
+                if($pos -gt 0)
+                {
+                    $version_check=$version_check.Substring(0, $pos)
+                }
+
+                if($version_check.Substring(0,1) -contains "v")
+                {
+                    $version_check=$version_check.Substring(1)
+                }
+
+                if($version_check -contains "latest")
+                {
+                    $version_check=""
+                }
+
+                if($version_check.IndexOf(".") -gt 0) {
+                    $pos = $version_check.IndexOf(".")
+                    $get_version_part=$version_check.Substring(0,$pos)
+                } else {
+                     $get_version_part=$version_check
+                }
+
+                if([int]$get_version_part -gt [int]$last) {
+                    $last=$get_version_part
+                }
+            }
+        }
+
+        $begin_filename="${begin_filename}${last}."
+
+        $version="${last}"
+
+        $last=-1
+        $site.Links | Foreach {
+            $url_items = $_.href
+
+            if($url_items -like "${begin_filename}*.msi" -AND $url_items -notlike "*-rc*") {
+                $filename=$url_items
+
+                $version_check=$filename.Substring(0,$filename.Length-4)
+                $version_check=$version_check.Substring($begin_filename.Length)
+                
+                $pos=$version_check.IndexOf('-')
+
+                if($pos -gt 0)
+                {
+                    $version_check=$version_check.Substring(0, $pos)
+                }
+
+                if($version_check.Substring(0,1) -contains "v")
+                {
+                    $version_check=$version_check.Substring(1)
+                }
+
+                if($version_check -contains "latest")
+                {
+                    $version_check=""
+                }
+
+                if($version_check.IndexOf(".") -gt 0) {
+                    $pos = $version_check.IndexOf(".")
+                    $get_version_part=$version_check.Substring(0,$pos)
+                } else {
+                     $get_version_part=$version_check
+                }
+
+                if([int]$get_version_part -gt [int]$last) {
+                    $last=$get_version_part
+                }
+            }
+        }
+
+        $begin_filename="${begin_filename}${last}."
+
+        $version="${version}.${last}"
+
+        $last=-1
+        $site.Links | Foreach {
+            $url_items = $_.href
+
+            if($url_items -like "${begin_filename}*.msi" -AND $url_items -notlike "*-rc*") {
+                $filename=$url_items
+
+                $version_check=$filename.Substring(0,$filename.Length-4)
+                $version_check=$version_check.Substring($begin_filename.Length)
+                
+                $pos=$version_check.IndexOf('-')
+
+                if($pos -gt 0)
+                {
+                    $version_check=$version_check.Substring(0, $pos)
+                }
+
+                if($version_check.Substring(0,1) -contains "v")
+                {
+                    $version_check=$version_check.Substring(1)
+                }
+
+                if($version_check -contains "latest")
+                {
+                    $version_check=""
+                }
+
+                if($version_check.IndexOf(".") -gt 0) {
+                    $pos = $version_check.IndexOf(".")
+                    $get_version_part=$version_check.Substring(0,$pos)
+                } else {
+                     $get_version_part=$version_check
+                }
+
+                if([int]$get_version_part -gt [int]$last) {
+                    $last=$get_version_part
+                }
+            }
+        }
+
+                if($last -ne -1) {
+            $version="${version}.${last}"
+            $begin_filename="otp${arch_ver}_${version}."
+        }
+
+        $found=0
+        $site.Links | Foreach {
+            $url_items = $_.href
+
+            if($url_items -like "*${version}*.msi") {
+                $url=$url_items
+                $pos_check="win32/"
+                $pos=$url.IndexOf($pos_check)
+                $filename=$url.Substring($pos+$pos_check.Length)
+                $found=1
+            }
+        }
+
+        if($found -lt 1) {
+            ErrorOut "DL not found"
+            }
+
+        $result = CompareVersions $installed_version $version
         if($result -eq "-2") {
-            ErrorOut "Unable to match MongoDB version (Installed Version: $installed_version / Requested Version: $mongodb_ver)"
+            ErrorOut "Unable to match MongoDB version (Installed Version: $installed_version / Requested Version: $version)"
         }
 
         if($result -eq 0) {
@@ -345,23 +700,26 @@ function MongoDBCheck([string]$version) {
         } else {
             LogWrite "MongoDB is out of date."
             
-            LogWrite -Color Cyan "MongoDB $installed_version will be updated to $mongodb_ver..."
-            if ([System.IntPtr]::Size -eq 4) {
-                $arch="32-bit"
-                $arch_ver='-i386'
-            } else {
-                $arch="64-bit"
-                $arch_ver='-x86_64-2008plus'
-            }
+        LogWrite "Stopping $global:svcname service (if applicable)"
 
-            $filename = 'mongodb-win32' + $arch_ver + '-' + $mongodb_ver + '-signed.msi';
+        Stop-Service $global:svcname -ErrorAction SilentlyContinue | Out-Null
+
+        LogWrite "Stopping $mongodb_svc_name service (if applicable)"
+
+        Stop-Service $mongodb_svc_name -ErrorAction SilentlyContinue | Out-Null
+
+        LogWrite "Removing MongoDB service (if applicable)"
+
+        RemoveService $mongodb_svc_name
+
+            LogWrite -Color Cyan "MongoDB $installed_version will be updated to $version..."
+
 	        $save_path = '' + $save_dir + '\' + $filename;
-            $url='http://downloads.mongodb.org/win32/' + $filename;
 	        if(!(Test-Path -pathType container $save_dir)) {
 		        ErrorOut "Save directory $save_dir does not exist"
 	        }
 
-            LogWrite "Downloading MongoDB ($arch) $mongodb_ver..."
+            LogWrite "Downloading MongoDB ($arch) $version..."
             DownloadFile $url $save_path
             LogWrite "MongoDB downloaded"
 
@@ -374,13 +732,11 @@ function MongoDBCheck([string]$version) {
 
             $global:reboot_needed="true"
             LogWrite -color Green "MongoDB Updated Successfully"
-            $installed_version = $mongodb_ver           
+            $installed_version = $version           
         }
 
         LogWrite -color Green "MongoDB Installed Version: $installed_version"
     }
-
-    if(!($global:update)) {
 
         LogWrite "Checking for MongoDB Service"
 
@@ -388,6 +744,16 @@ function MongoDBCheck([string]$version) {
             LogWrite "MongoDB Service Already Installed, skipping..."
         } else {
             LogWrite "Installing MongoDB Service"
+
+            $version=$version.Split(".")
+            $version=$version[0] + "." + $version[1]
+
+            $mongod_path='' + $env:programfiles + "\MongoDB\Server\${version}\bin\"
+            $mongod_exe='' + $mongod_path + 'mongod.exe'; #Default: \mongod.exe
+
+            if(!(Test-Path -pathType container $mongod_path)) {
+		        ErrorOut "MongoDB Binaries do not exist at $mongod_path, try manually installing it..."
+	        }
 
             if(!(Test-Path -pathType container $global:mongodb_dbpath)) {
 		        LogWrite "Database Directory $global:mongodb_dbpath does not exist, creating..."
@@ -401,6 +767,16 @@ function MongoDBCheck([string]$version) {
 
  	        if(!(Test-Path -pathType container $save_dir)) {
 		        ErrorOut "Log Directory $save_dir does not exist"
+	        }
+
+            if(!(Test-Path -pathType container $mongodb_log_path)) {
+		        LogWrite "Log Directory $mongodb_log_path does not exist, creating..."
+
+                New-Item $mongodb_log_path -type directory -force | Out-Null
+            
+                if(!(Test-Path -pathType container $mongodb_log_path)) {
+		            ErrorOut "Log Directory $mongodb_log_path failed to create, try it manually..."
+	            }
 	        }
 
             $Arguments="--install "
@@ -422,42 +798,135 @@ function MongoDBCheck([string]$version) {
         }
 
         if($global:runas) {
-            ChangeLogonService -svc_name $mongodb_svc_name -username $global:username -password $global:password
+            ChangeLogonService -svc_name $mongodb_svc_name -username ".\$global:username" -password $global:password
         }
 
-    } else {
-        LogWrite "Skipping service functions, in update mode"
-    }
+
+                Start-Service $mongodb_svc_name -ErrorAction SilentlyContinue
+                Start-Service $global:svcname -ErrorAction SilentlyContinue
 }
 
-function ErlangCheck([string]$version) {
+function ErlangCheck() {
     LogWrite "Checking if Erlang is installed..."
     If(!(Get-IsProgramInstalled "Erlang")) {
-        LogWrite "Erlang $version is not installed."
+        LogWrite "Erlang is not installed."
         if ([System.IntPtr]::Size -eq 4) {
             $arch="32-bit"
-            $arch_ver='32_'
+            $arch_ver='_win32'
         } else {
             $arch="64-bit"
-            $arch_ver='64_'
+            $arch_ver='_win64'
         }
 
-	    $filename = 'otp_win' + $arch_ver + $version + '.exe';
+        LogWrite "Obtaining Erlang version..."
+        $url = "http://erlang.org/download/"
+        $site = Invoke-WebRequest -URI "$url" -UseBasicParsing
+        
+        $begin_filename="otp${arch_ver}_"
+
+        $last=-1
+        $site.Links | Foreach {
+            $url_items = $_.href
+
+            if($url_items -like "${begin_filename}*.exe" -AND $url_items -notlike "*-rc*" -AND $url_items -notlike "*_R*") {
+                $filename=$url_items
+
+                $version_check=$filename.Substring(0,$filename.Length-4)
+                $version_check=$version_check.Substring($begin_filename.Length)
+
+                if($version_check.IndexOf(".") -gt 0) {
+                    $pos = $version_check.IndexOf(".")
+                    $get_version_part=$version_check.Substring(0,$pos)
+                } else {
+                     $get_version_part=$version_check
+                }
+
+                if([int]$get_version_part -gt [int]$last) {
+                    $last=$get_version_part
+                }
+
+            }
+        }
+
+        $version=$last
+
+        $begin_filename="otp${arch_ver}_${version}."
+
+        $last=-1
+        $site.Links | Foreach {
+            $url_items = $_.href
+
+            if($url_items -like "${begin_filename}*.exe" -AND $url_items -notlike "*-rc*" -AND $url_items -notlike "*_R*") {
+                $filename=$url_items
+
+                $version_check=$filename.Substring(0,$filename.Length-4)
+                $version_check=$version_check.Substring($begin_filename.Length)
+
+                if($version_check.IndexOf(".") -gt 0) {
+                    $pos = $version_check.IndexOf(".")
+                    $get_version_part=$version_check.Substring(0,$pos)
+                } else {
+                     $get_version_part=$version_check
+                }
+
+                if([int]$get_version_part -gt [int]$last) {
+                    $last=$get_version_part
+                }
+
+            }
+        }
+
+        $version="${version}.${last}"
+
+        $begin_filename="otp${arch_ver}_${version}."
+
+        $last=-1
+        $site.Links | Foreach {
+            $url_items = $_.href
+
+            if($url_items -like "${begin_filename}*.exe" -AND $url_items -notlike "*-rc*" -AND $url_items -notlike "*_R*") {
+                $filename=$url_items
+
+                $version_check=$filename.Substring(0,$filename.Length-4)
+                $version_check=$version_check.Substring($begin_filename.Length)
+
+                if($version_check.IndexOf(".") -gt 0) {
+                    $pos = $version_check.IndexOf(".")
+                    $get_version_part=$version_check.Substring(0,$pos)
+                } else {
+                     $get_version_part=$version_check
+                }
+
+                if([int]$get_version_part -gt [int]$last) {
+                    $last=$get_version_part
+                }
+
+            }
+        }
+
+        if($last -ne -1) {
+            $version="${version}.${last}"
+            $begin_filename="otp${arch_ver}_${version}."
+        }
+
+        LogWrite "Erlang latest version is ${version}"
+
+	    $filename = "${begin_filename}exe";
 	    $save_path = '' + $save_dir + '\' + $filename;
-        $url='http://erlang.org/download/' + $filename;
+        $url="${url}${filename}";
 	    if(!(Test-Path -pathType container $save_dir)) {
 		    ErrorOut "Save directory $save_dir does not exist"
 	    }
 
         LogWrite "Downloading Erlang ($arch) $version..."
         DownloadFile $url $save_path
-        LogWrite "Erlang ($arch) $erlang_ver downloaded"
+        LogWrite "Erlang ($arch) $version downloaded"
 
 	    LogWrite "Installing Erlang ($arch) $version..."
         $Arguments = "/S"
 	    InstallEXE $save_path $Arguments
         
-        If(!(Get-IsProgramInstalled "Erlang")) {
+        if(!(Get-IsProgramInstalled "Erlang")) {
            ErrorOut "Erlang did not complete installation successfully...try manually installing it..."
         }
 
@@ -467,18 +936,125 @@ function ErlangCheck([string]$version) {
     else
     {
         LogWrite "Erlang is already installed. Skipping install..."
-
-        <#  DOES NOT SUPPORT UPDATING (JUST YET)
         LogWrite "Checking version..."
 
-        $installed_version = Get-ProgramVersion( "Erlang" )
+        $program_name = "Erlang OTP"
+
+        $installed_version = Get-ProgramVersion( $program_name )
         if(!$installed_version) {
             ErrorOut "Erlang Version is Unknown - Error"
         }
 
-        $result = CompareVersions $installed_version $erlang_ver
+        $installed_version = $installed_version.Substring($program_name.Length+1)
+        $pos = $installed_version.IndexOf("(")
+        $installed_version = $installed_version.SubString(0,$pos-1)
+
+        if($installed_version -notcontains ".") {
+            $installed_version = "${installed_version}.0"
+        }
+
+        if ([System.IntPtr]::Size -eq 4) {
+            $arch="32-bit"
+            $arch_ver='_win32'
+        } else {
+            $arch="64-bit"
+            $arch_ver='_win64'
+        }
+
+        LogWrite "Obtaining Erlang version..."
+        $url = "http://erlang.org/download/"
+        $site = Invoke-WebRequest -URI "$url" -UseBasicParsing
+        
+        $begin_filename="otp${arch_ver}_"
+
+        $last=-1
+        $site.Links | Foreach {
+            $url_items = $_.href
+
+            if($url_items -like "${begin_filename}*.exe" -AND $url_items -notlike "*-rc*" -AND $url_items -notlike "*_R*") {
+                $filename=$url_items
+
+                $version_check=$filename.Substring(0,$filename.Length-4)
+                $version_check=$version_check.Substring($begin_filename.Length)
+
+                if($version_check.IndexOf(".") -gt 0) {
+                    $pos = $version_check.IndexOf(".")
+                    $get_version_part=$version_check.Substring(0,$pos)
+                } else {
+                     $get_version_part=$version_check
+                }
+
+                if([int]$get_version_part -gt [int]$last) {
+                    $last=$get_version_part
+                }
+
+            }
+        }
+
+        $version=$last
+
+        $begin_filename="otp${arch_ver}_${version}."
+
+        $last=-1
+        $site.Links | Foreach {
+            $url_items = $_.href
+
+            if($url_items -like "${begin_filename}*.exe" -AND $url_items -notlike "*-rc*" -AND $url_items -notlike "*_R*") {
+                $filename=$url_items
+
+                $version_check=$filename.Substring(0,$filename.Length-4)
+                $version_check=$version_check.Substring($begin_filename.Length)
+
+                if($version_check.IndexOf(".") -gt 0) {
+                    $pos = $version_check.IndexOf(".")
+                    $get_version_part=$version_check.Substring(0,$pos)
+                } else {
+                     $get_version_part=$version_check
+                }
+
+                if([int]$get_version_part -gt [int]$last) {
+                    $last=$get_version_part
+                }
+
+            }
+        }
+
+        $version="${version}.${last}"
+
+        $begin_filename="otp${arch_ver}_${version}."
+
+        $last=-1
+        $site.Links | Foreach {
+            $url_items = $_.href
+
+            if($url_items -like "${begin_filename}*.exe" -AND $url_items -notlike "*-rc*" -AND $url_items -notlike "*_R*") {
+                $filename=$url_items
+
+                $version_check=$filename.Substring(0,$filename.Length-4)
+                $version_check=$version_check.Substring($begin_filename.Length)
+
+                if($version_check.IndexOf(".") -gt 0) {
+                    $pos = $version_check.IndexOf(".")
+                    $get_version_part=$version_check.Substring(0,$pos)
+                } else {
+                     $get_version_part=$version_check
+                }
+
+                if([int]$get_version_part -gt [int]$last) {
+                    $last=$get_version_part
+                }
+
+            }
+        }
+
+        if($last -ne -1) {
+            $version="${version}.${last}"
+            $begin_filename="otp${arch_ver}_${version}."
+        }
+
+        $result = CompareVersions $installed_version $version
         if($result -eq "-2") {
-            ErrorOut "Unable to match Erlang version (Installed Version: $installed_version / Requested Version: $erlang_ver)"
+            ErrorOut "Unable to match Erlang version (Installed Version: $installed_version / Requested Version: $version)"
         }
 
         if($result -eq 0)
@@ -488,27 +1064,19 @@ function ErlangCheck([string]$version) {
             LogWrite "Erlang is newer than the recommended version. Skipping..."
         } else {
             LogWrite "Erlang is out of date."
-            
-            if ([System.IntPtr]::Size -eq 4) {
-                $arch="32-bit"
-                $arch_ver='32_'
-            } else {
-                $arch="64-bit"
-                $arch_ver='64_'
-            }
 
-	        $filename = 'otp_win' + $arch_ver + $erlang_ver + '.exe';
+	        $filename = "${begin_filename}exe";
 	        $save_path = '' + $save_dir + '\' + $filename;
-            $url='http://erlang.org/download/' + $filename;
+            $url="${url}${filename}";
 	        if(!(Test-Path -pathType container $save_dir)) {
 		        ErrorOut "Save directory $save_dir does not exist"
 	        }
 
-            LogWrite "Downloading Erlang ($arch) $erlang_ver..."
+            LogWrite "Downloading Erlang ($arch) $version..."
             DownloadFile $url $save_path
-            LogWrite "Erlang ($arch) $erlang_ver downloaded"
+            LogWrite "Erlang ($arch) $version downloaded"
 
-	        LogWrite "Installing Erlang ($arch) $erlang_ver..."
+	        LogWrite "Installing Erlang ($arch) $version..."
             $Arguments = "/S"
 	        InstallEXE $save_path $Arguments
         
@@ -518,21 +1086,40 @@ function ErlangCheck([string]$version) {
 
             $global:reboot_needed="true"
             LogWrite -color Green "Erlang Updated Successfully"
-            $installed_version = $erlang_ver
+            $installed_version = $version
             
         }
-        #>
+        LogWrite -color Green "Erlang Installed Version: $installed_version"
     }
 }
 
-function RabbitMQCheck([string]$version) {
+function RabbitMQCheck() {
     LogWrite "Checking if RabbitMQ is installed..."
     If(!(Get-IsProgramInstalled "RabbitMQ")) {
         LogWrite "RabbitMQ $version is not installed."
 
-	    $filename = 'rabbitmq-server-' + $version + '.exe';
+        $url = "https://www.rabbitmq.com/releases/rabbitmq-server/current/"
+        $site = Invoke-WebRequest -URI "$url" -UseBasicParsing
+        $found=0
+        $site.Links | Foreach {
+        $url_items = $_.href
+
+        if($url_items -like "*.exe") {
+            $filename=$url_items
+            $found=1
+        }
+        }
+
+        if($found -ne 1) {
+            ErrorOut "Unable to gather RabbitMQ Version";
+        }
+
+        $url="${url}$filename"
+        $version = $filename.Substring(0,$filename.Length-".exe".Length)
+        $pos = $version.IndexOf("server-")
+        $version = $version.Substring($pos+7)
 	    $save_path = '' + $save_dir + '\' + $filename;
-        $url='https://www.rabbitmq.com/releases/rabbitmq-server/v' + $version + '/' + $filename;
+
 	    if(!(Test-Path -pathType container $save_dir)) {
 		    ErrorOut "Save directory $save_dir does not exist"
 	    }
@@ -562,9 +1149,31 @@ function RabbitMQCheck([string]$version) {
             ErrorOut "RabbitMQ Version is Unknown - Error"
         }
 
-        $result = CompareVersions $installed_version $rabbitmq_ver
+        $url = "https://www.rabbitmq.com/releases/rabbitmq-server/current/"
+        $site = Invoke-WebRequest -URI "$url" -UseBasicParsing
+        $found=0
+        $site.Links | Foreach {
+        $url_items = $_.href
+
+        if($url_items -like "*.exe") {
+            $filename=$url_items
+            $found=1
+        }
+
+        }
+
+        if($found -ne 1) {
+            ErrorOut "Unable to gather RabbitMQ Version";
+        }
+
+        $url="${url}$filename"
+        $version = $filename.Substring(0,$filename.Length-".exe".Length)
+        $pos = $version.IndexOf("server-")
+        $version = $version.Substring($pos+7)
+
+        $result = CompareVersions $installed_version $version
         if($result -eq "-2") {
-            ErrorOut "Unable to match RabbitMQ version (Installed Version: $installed_version / Requested Version: $rabbitmq_ver)"
+            ErrorOut "Unable to match RabbitMQ version (Installed Version: $installed_version / Requested Version: $version)"
         }
 
         if($result -eq 0)
@@ -575,20 +1184,18 @@ function RabbitMQCheck([string]$version) {
         } else {
             LogWrite "RabbitMQ is out of date."
             
-            LogWrite -Color Cyan "Rabbit $installed_version will be updated to $rabbitmq_ver..."
+            LogWrite -Color Cyan "Rabbit $installed_version will be updated to $version..."
 	        
-            $filename = 'rabbitmq-server-' + $rabbitmq_ver + '.exe';
 	        $save_path = '' + $save_dir + '\' + $filename;
-            $url='https://www.rabbitmq.com/releases/rabbitmq-server/v' + $rabbitmq_ver + '/' + $filename;
 	        if(!(Test-Path -pathType container $save_dir)) {
 		        ErrorOut "Save directory $save_dir does not exist"
 	        }
 
-            LogWrite "Downloading RabbitMQ $rabbitmq_ver..."
+            LogWrite "Downloading RabbitMQ $version..."
             DownloadFile $url $save_path
             LogWrite "RabbitMQ downloaded"
 
-	        LogWrite "InstallingRabbitMQ $rabbitmq_ver..."
+	        LogWrite "InstallingRabbitMQ $version..."
             $Arguments = "/S"
 	        InstallEXE $save_path $Arguments
         
@@ -598,8 +1205,9 @@ function RabbitMQCheck([string]$version) {
 
             $global:reboot_needed="true"
             LogWrite -color Green "RabbitMQ Updated Successfully"
-            $installed_version = $rabbitmq_ver            
+            $installed_version = $version            
         }
+        LogWrite -color Green "RabbitMQ Installed Version: $installed_version"
     }
 }
 
@@ -963,6 +1571,7 @@ function PythonCheck([string]$version) {
 
         $global:reboot_needed="true"
         LogWrite -color Green "Python Installed Successfully"
+        $installed_version=$python_ver
     }
     else
     {
@@ -1078,6 +1687,13 @@ function PythonCheck([string]$version) {
     LogWrite "Checking for Python Environment Path..."
     $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine")
     $PathasArray=($Env:PATH).split(';')
+
+    $split_version=$installed_version.split('.')
+    $python_path="C:\Python" + $split_version[0] + $split_version[1] + "\"
+
+    if(!(Test-Path -pathType container $python_path)) {
+        ErrorOut "Save directory $python_path does not exist";
+    }
     if ($PathasArray -contains $python_path -or $PathAsArray -contains $python_path+'\') {
         LogWrite "Python Environment Path $python_path already within System Environment Path, skipping..."
     } else {
@@ -1164,7 +1780,7 @@ function storj-bridgeCheck() {
     #write npm logs to log file if in silent mode
     if($silent) {
         LogWrite "npm $Arguments results"
-        Add-content $log_file -value $output
+        Add-content $storj_bridge_install_log_file -value $output
     }
 
     if (!$output.Length -gt 0) {
@@ -1177,7 +1793,7 @@ function storj-bridgeCheck() {
         #write npm logs to log file if in silent mode
         if($silent) {
             LogWrite "npm $Arguments results"
-            Add-content $log_file -value $result
+            Add-content $storj_bridge_install_log_file -value $result
         }
 
         if ($result.Length -gt 0) {
@@ -1188,7 +1804,19 @@ function storj-bridgeCheck() {
     }
     else
     {
-        LogWrite "storj-bridge already installed."
+        LogWrite -color Green "storj-bridge already installed."
+
+        LogWrite "Checking if storj-bridge update is needed"
+        $Arguments = "outdated -g -depth 1 storj-bridge"
+        $result=(UseNPM $Arguments)
+        #write npm logs to log file if in silent mode
+        if($silent) {
+            LogWrite "npm $Arguments results"
+            Add-content $storj_bridge_install_log_file -value $result
+        }
+        if ($result.Length -gt 0) {
+            LogWrite -color Red "storj-bridge update needed"
+            LogWrite -color Cyan "Performing storj-bridge Update..."
 
         LogWrite "Stopping $global:svcname service (if applicable)"
 
@@ -1196,14 +1824,13 @@ function storj-bridgeCheck() {
 
         LogWrite -color Cyan "Performing storj-bridge Update..."
 
-        #$Arguments = "update -g storj-bridge"
         $Arguments = "install -g storj-bridge"
         $result=(UseNPM $Arguments| Where-Object {$_ -like '*ERR!*'})
 
         #write npm logs to log file if in silent mode
         if($silent) {
             LogWrite "npm $Arguments results"
-            Add-content $log_file -value $result
+            Add-content $storj_bridge_install_log_file -value $result
         }
 
         if ($result.Length -gt 0) {
@@ -1212,19 +1839,43 @@ function storj-bridgeCheck() {
         
         LogWrite -color Green "storj-bridge Update Completed"
 
-        LogWrite -color Cyan "Checking storj-bridge version..."
-
-        $pos=$output.IndexOf("storj-bridge@")
-
-        $version = $output.Substring($pos+15)
-        if(!$version) {
-            ErrorOut "storj-bridge Version is Unknown - Error"
+        } else {
+            LogWrite -color Green "No update needed for storj-bridge"
         }
 
-        Start-Service -Name $global:svcname -ErrorAction SilentlyContinue
+        LogWrite -color Cyan "Checking storj-bridge version..."
+        $Arguments = "list -g storj-bridge"
+        $result=(UseNPM $Arguments)
+        if ($result.Length -lt 1) {
+            ErrorOut "storj-bridge did not complete update successfully...try manually updating it..."
+        }
+        #write npm logs to log file if in silent mode
+        if($silent) {
+            LogWrite "npm $Arguments results"
+            Add-content $storj_bridge_install_log_file -value $result
+        }
 
+        $result=$result.Split('@')
+        $version = $result[2]
         LogWrite -color Green "storj-bridge Installed Version: $version"
     }
+
+    LogWrite -color Cyan "Checking storj-bridge Version..."
+        <# - Not implemented in storj-bridge
+    LogWrite -color Cyan "Placing version into log file..."
+    if(!(Test-Path -pathType container $save_dir)) {
+    	ErrorOut "Log directory $save_dir does not exist";
+    }
+    $Arguments="/c storj-bridge -V"
+    if($global:runas) {
+        Start-Process "cmd.exe" -Credential $global:credential -WorkingDirectory "$global:npm_path" -ArgumentList $Arguments -RedirectStandardOutput $global:storj_bridge_log_ver -Wait
+    } else {
+        Start-Process "cmd.exe" -ArgumentList $Arguments -RedirectStandardOutput $global:storj_bridge_log_ver -Wait
+    }
+    $timestamp = Get-Date -Format "yyyy-MM-dd HH:MM:ss"
+    Add-Content $global:storj_bridge_log_ver "Timestamp: $timestamp"
+    LogWrite -color Cyan "Version recorded."
+    #>
 
     LogWrite "Checking for storj-bridge Environment Variable..."
     $env:NODE_ENV = [System.Environment]::GetEnvironmentVariable("NODE_ENV","Machine")
@@ -1267,6 +1918,26 @@ function Get-ProgramVersion([string]$program) {
         $version = $version[1].Split("}")[0]
     } else {
         $version = ""
+    }
+
+    if(!$version) {
+        $x86 = ((Get-ChildItem  -ErrorAction SilentlyContinue "HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall") |
+            Where-Object { $_.GetValue( "DisplayName" ) -like "*$program*" } |
+            Select-Object { $_.GetValue( "DisplayName" ) }  )
+
+        $x64 = ((Get-ChildItem  -ErrorAction SilentlyContinue "HKLM:\Software\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall") |
+            Where-Object { $_.GetValue( "DisplayName" ) -like "*$program*" } |
+            Select-Object { $_.GetValue( "DisplayName" ) }  )
+
+        if ($x86) {
+            $version = $x86 -split "="
+            $version = $version[1].Split("}")[0]
+        } elseif ($x64)  {
+            $version = $x64 -split "="
+            $version = $version[1].Split("}")[0]
+        } else {
+            $version = ""
+        }
     }
 
     return $version;
@@ -1361,18 +2032,17 @@ function InstallMSI([string]$installer) {
 }
 
 function UseNPM([string]$Arguments) {
-	$filename = 'npm_output.log';
-	$save_path = '' + $save_dir + '\' + $filename;
-
-	$filename_err = 'npm_output_err.log';
-	$save_path_err = '' + $save_dir + '\' + $filename_err;
-	if(!(Test-Path -pathType container $save_dir)) {
-	    ErrorOut "Log directory $save_dir does not exist";
-	}
-
-	if(!(Test-Path -pathType container $global:npm_path)) {
-	    New-Item $global:npm_path -type directory -force | Out-Null
-	}
+    $filename = 'npm_output.log';
+    $save_path = '' + $storj_bridge_install_log_path + '\' + $filename;
+    $filename_err = 'npm_output_err.log';
+    $save_path_err = '' + $storj_bridge_install_log_path + '\' + $filename_err;
+    if(!(Test-Path -pathType container $storj_bridge_install_log_path)) {
+        ErrorOut "Log directory $storj_bridge_install_log_path does not exist";
+    }
+    
+    if(!(Test-Path -pathType container $global:npm_path)) {
+        New-Item $global:npm_path -type directory -force | Out-Null
+    }
 
     if($global:runas) {
         $proc = Start-Process "npm" -Credential $global:credential -WorkingDirectory "$global:npm_path" -ArgumentList $Arguments -RedirectStandardOutput "$save_path" -RedirectStandardError "$save_path_err"
@@ -1510,20 +2180,17 @@ function DisableUPNP() {
 }
 
 function SetUPNP([string]$upnp_set, [string]$Old) {
-	$filename = 'upnp_output.log';
-	$save_path = '' + $save_dir + '\' + $filename;
-
-	if(!(Test-Path -pathType container $save_dir)) {
-	    ErrorOut "Log directory $save_dir does not exist";
-	}
-	
+    $filename = 'upnp_output.log';
+    $save_path = '' + $storj_bridge_install_log_path + '\' + $filename;
+    if(!(Test-Path -pathType container $storj_bridge_install_log_path)) {
+        ErrorOut "Log directory $storj_bridge_install_log_path does not exist";
+    }
     if($Old) {
         if($upnp_set -eq "Yes") {
             $upnp_set_result="enable"
         } else {
             $upnp_set_result="disable"
         }
-
         $Arguments="firewall set service type=upnp mode=$upnp_set_result"
     } else {
         $Arguments="advfirewall firewall set rule group=`"Network Discovery`" new enable=$($upnp_set)"
@@ -1540,13 +2207,10 @@ function SetUPNP([string]$upnp_set, [string]$Old) {
     }
     
     $results=(Get-Content -Path "$save_path") | Where-Object {$_ -like '*Ok*'}
-
     Remove-Item "$save_path"
-    
     if($results.Length -eq 0) {
         return 0
     }
-
     return 1
 }
 
@@ -1589,25 +2253,21 @@ function RemoveService([string]$svc_name) {
 }
 
 function UseNSSM([string]$Arguments) {
-	$filename = 'nssm_output.log';
-	$save_path = '' + $save_dir + '\' + $filename;
-	if(!(Test-Path -pathType container $save_dir)) {
-	    ErrorOut "Save directory $save_dir does not exist";
-	}
-	
+    $filename = 'nssm_output.log';
+    $save_path = '' + $storj_bridge_install_log_path + '\' + $filename;
+    if(!(Test-Path -pathType container $storj_bridge_install_log_path)) {
+        ErrorOut "Save directory $storj_bridge_install_log_path does not exist";
+    }
     if($silent) {
         $proc = Start-Process "nssm" -ArgumentList $Arguments -RedirectStandardOutput "$save_path" -Wait -NoNewWindow
     } else {
         $proc = Start-Process "nssm" -ArgumentList $Arguments -RedirectStandardOutput "$save_path" -Wait
     }
-
     if(!(Test-Path $save_path)) {
         ErrorOut "nssm command $Arguments failed to execute..."
     }
-    
     $results=(Get-Content -Path "$save_path")
     Remove-Item "$save_path"
-    
     return $results
 }
 
@@ -1641,86 +2301,78 @@ function Installnssm([string]$save_location,[string]$arch) {
 }
 
 function nssmCheck([string]$version) {
-
-    if($global:removesvc) {
-        RemoveService $global:svcname
-    }
-
-    if(!($global:update)) {
-        if(!($global:nosvc)) {
+    if(!$global:nosvc) {
+        LogWrite "Checking if NSSM is installed..."
+	if(!(Test-Path $nssm_bin)) {
+            LogWrite "NSSM is not installed."
+            if ([System.IntPtr]::Size -eq 4) {
+                $arch="32-bit"
+                $arch_ver='win32'
+            } else {
+                $arch="64-bit"
+                $arch_ver='win64'
+            }
+	    $filename = 'nssm-' + $version + '.zip';
+	    $save_path = '' + $save_dir + '\' + $filename;
+            $url='https://nssm.cc/release/' + $filename;
+	    if(!(Test-Path -pathType container $save_dir)) {
+	        ErrorOut "Save directory $save_dir does not exist"
+	    }
+            LogWrite "Downloading NSSM $version..."
+            DownloadFile $url $save_path
+            LogWrite "NSSM downloaded"
+            LogWrite "Installing NSSM $version..."
+            Installnssm $save_path $arch_ver
+            LogWrite -color Green "NSSM Installed Successfully"
+        } else {
+             LogWrite -color Green "NSSM already installed"
+        }
+        if(!($global:update)) {
+            LogWrite "Checking for $global:svcname to see if it exists"
             if(!(CheckService $global:svcname)) {
-                LogWrite "Checking if NSSM is installed..."
-	            if(!(Test-Path $nssm_bin)) {
-                    LogWrite "NSSM is not installed."
-                    if ([System.IntPtr]::Size -eq 4) {
-                        $arch="32-bit"
-                        $arch_ver='win32'
+                     LogWrite "Checking if storj-bridge log directory exists..."
+	            if(!(Test-Path -pathType container $storj_bridge_log_path)) {
+	                ErrorOut "storj-bridge log directory $storj_bridge_log_path does not exist, you may want to setup storj-bridge first.";
+	            }
+                    LogWrite "Installing service $global:svcname"
+                    $Arguments="install $global:svcname $global:storj_bridge_bin >> $global:storj_bridge_log"
+                    $results=UseNSSM $Arguments
+                    if(CheckService($global:svcname)) {
+                        LogWrite -color Green "Service $global:svcname Installed Successfully"
                     } else {
-                        $arch="64-bit"
-                        $arch_ver='win64'
+                        ErrorOut "Failed to install service $global:svcname"
+                    }
+                    if($global:runas) {
+                        ChangeLogonService -svc_name $global:svcname -username ".\$global:username" -password $global:password
                     }
 
-	                $filename = 'nssm-' + $version + '.zip';
-	                $save_path = '' + $save_dir + '\' + $filename;
-                    $url='https://nssm.cc/release/' + $filename;
-	                if(!(Test-Path -pathType container $save_dir)) {
-		                ErrorOut "Save directory $save_dir does not exist"
-	                }
-
-                    LogWrite "Downloading NSSM $version..."
-                    DownloadFile $url $save_path
-                    LogWrite "NSSM downloaded"
-
-                    LogWrite "Installing NSSM $version..."
-                    Installnssm $save_path $arch_ver
-
-                    LogWrite -color Green "NSSM Installed Successfully"
-                } else {
-                     LogWrite -color Green "NSSM already installed, skipping"
-                }
-
-                LogWrite "Installing service $global:svcname"
-                $Arguments="install $global:svcname $global:storj_bridge_bin >> $storj_bridge_log"
-                $results=UseNSSM $Arguments
-                if(CheckService($global:svcname)) {
-                    LogWrite -color Green "Service $global:svcname Installed Successfully"
-                } else {
-                    ErrorOut "Failed to install service $global:svcname"
-                }
-
-                #WORKAROUND#
+                #WORKAROUND - Default Working Directory#
                 LogWrite "Setting service $global:svcname default directory to: $global:storj_brige_wa"
                 $Arguments="set $global:svcname AppDirectory $global:storj_brige_wa"
                 $results=UseNSSM $Arguments
-                #WORKAROUND#
+                #WORKAROUND - Default Working Directory#
 
                 ModifyService "$global:svcname" "Automatic"
                 LogWrite "Starting $global:svcname service..."
                 Start-Service $global:svcname -ErrorAction SilentlyContinue
             } else {
-                LogWrite "Service $global:svcname already installed, skipping"
+                LogWrite "Service already exists, skipping..."
                 Start-Service $global:svcname -ErrorAction SilentlyContinue
             }
-
-            if($global:runas) {
-                ChangeLogonService -svc_name $global:svcname -username $global:username -password $global:password
-            }
         } else {
-            LogWrite -color Green "Skipping Service Check/Installation - No Service Parameter passed"
+            LogWrite "Skipping service functions, in update mode"
         }
     } else {
-        LogWrite "Skipping service functions, in update mode"
-        Remove-Item $storj_bridge_log
-        Start-Service -Name $global:svcname -ErrorAction SilentlyContinue
+        LogWrite "Service set to not install, skipping..."
     }
 }
 
 function GetUserEnvironment([string]$env_var) {
 	$filename = 'user_env.log';
-	$save_path = '' + $log_path + '\' + $filename;
+	$save_path = '' + $storj_bridge_install_log_path + '\' + $filename;
 
-	if(!(Test-Path -pathType container $log_path)) {
-	    ErrorOut "Save directory $log_path does not exist";
+	if(!(Test-Path -pathType container $storj_bridge_install_log_path)) {
+	    ErrorOut "Save directory $storj_bridge_install_log_path does not exist";
 	}
 
     $Arguments="/c ECHO $env_var"
@@ -1747,8 +2399,8 @@ param(
     [string[]] $users
     )
     #Get list of currently used SIDs 
-    secedit /export /cfg "$log_path\tempexport.inf"
-    $curSIDs = Select-String "$log_path\tempexport.inf" -Pattern "SeServiceLogonRight" 
+    secedit /export /cfg "$storj_bridge_install_log_path\tempexport.inf"
+    $curSIDs = Select-String "$storj_bridge_install_log_path\tempexport.inf" -Pattern "SeServiceLogonRight" 
     $Sids = $curSIDs.line 
     $sidstring = ""
     foreach($user in $users){
@@ -1761,19 +2413,19 @@ param(
     if($sidstring){
         $newSids = $sids + $sidstring
         LogWrite "New Sids: $newSids"
-        $tempinf = Get-Content "$log_path\tempexport.inf"
+        $tempinf = Get-Content "$storj_bridge_install_log_path\tempexport.inf"
         $tempinf = $tempinf.Replace($Sids,$newSids)
-        Add-Content -Path "$log_path\tempimport.inf" -Value $tempinf
-        secedit /import /db "$log_path\secedit.sdb" /cfg "$log_path\tempimport.inf" 
-        secedit /configure /db "$log_path\secedit.sdb"
+        Add-Content -Path "$storj_bridge_install_log_path\tempimport.inf" -Value $tempinf
+        secedit /import /db "$storj_bridge_install_log_path\secedit.sdb" /cfg "$storj_bridge_install_log_path\tempimport.inf" 
+        secedit /configure /db "$storj_bridge_install_log_path\secedit.sdb"
  
         gpupdate /force 
     }else{
         LogWrite "No new sids, skipping..."
     }
-    del "$log_path\tempimport.inf" -force -ErrorAction SilentlyContinue
-    del "$log_path\secedit.sdb" -force -ErrorAction SilentlyContinue
-    del "$log_path\tempexport.inf" -force
+    del "$storj_bridge_install_log_path\tempimport.inf" -force -ErrorAction SilentlyContinue
+    del "$storj_bridge_install_log_path\secedit.sdb" -force -ErrorAction SilentlyContinue
+    del "$storj_bridge_install_log_path\tempexport.inf" -force
 }
 
 function storj_bridge_checkver([string]$script_ver) {
@@ -1788,19 +2440,14 @@ function storj_bridge_checkver([string]$script_ver) {
 }
 
 function autoupdate($howoften) {
-
     if(!($global:update)) {
-
         Copy-Item "${automated_script_path}automate_storj_bridge.ps1" "$global:npm_path" -force -ErrorAction SilentlyContinue
         LogWrite "Script file copied to $global:npm_path"
-
         if(!($global:noautoupdate)) {
             $Arguments="-NoProfile -NoLogo -Noninteractive -WindowStyle Hidden -ExecutionPolicy Bypass ""${global:npm_path}automate_storj_bridge.ps1"" -silent -update"
             $action = New-ScheduledTaskAction -Execute 'Powershell.exe' -Argument $Arguments
             $trigger =  New-ScheduledTaskTrigger -Daily -At $global:checktime
-
-            Register-ScheduledTask -Action $action -Trigger $trigger -TaskName "storjshare Auto-Update" -Description "Updates storjshare software $howoften at $global:checktime local time" -RunLevel Highest -ErrorAction SilentlyContinue
-            
+            Register-ScheduledTask -Action $action -Trigger $trigger -TaskName "storj-bridge Auto-Update" -Description "Updates storj-bridge software $howoften at $global:checktime local time" -RunLevel Highest -ErrorAction SilentlyContinue
             LogWrite "Scheduled Task Created"
         } else {
             LogWrite "No autoupdate specified skipping"
@@ -1821,12 +2468,12 @@ LogWrite -color Cyan "Github Site: https://github.com/Storj/storj-automation"
 LogWrite -color Red "USE AT YOUR OWN RISK"
 LogWrite ""
 LogWrite -color Yellow "Recommended Versions of Software"
-LogWrite -color Cyan "MongoDB: $mongodb_ver"
+LogWrite -color Cyan "MongoDB: Latest Version"
 LogWrite -color Cyan "Git for Windows: Latest Version"
 LogWrite -color Cyan "Node.js - Major Branch: $nodejs_ver"
 LogWrite -color Cyan "Python - Major Branch: $python_ver"
-LogWrite -color Cyan "Erlang: $erlang_ver"
-LogWrite -color Cyan "RabbitMQ: $rabbitmq_ver"
+LogWrite -color Cyan "Erlang: Latest Version"
+LogWrite -color Cyan "RabbitMQ: Latest Version"
 LogWrite -color Cyan "Visual Studio: $visualstudio_ver Commmunity Edition"
 LogWrite -color Yellow "=============================================="
 LogWrite ""
@@ -1834,15 +2481,15 @@ LogWrite -color Cyan "Checking for Pre-Requirements..."
 LogWrite ""
 LogWrite ""
 LogWrite -color Yellow "Reviewing mongoDB..."
-MongoDBCheck $mongodb_ver
+MongoDBCheck
 LogWrite -color Green "mongoDB Review Completed"
 LogWrite ""
 LogWrite -color Yellow "Reviewing Erlang..."
-ErlangCheck $erlang_ver
+ErlangCheck
 LogWrite -color Green "Erlang Review Completed"
 LogWrite ""
 LogWrite -color Yellow "Reviewing RabbitMQ..."
-RabbitMQCheck $rabbitmq_ver
+RabbitMQCheck
 LogWrite -color Green "RabbitMQ Review Completed"
 LogWrite ""
 LogWrite -color Yellow "Reviewing Git for Windows..."
@@ -1893,12 +2540,12 @@ LogWrite -color Yellow "=============================================="
 LogWrite ""
 LogWrite -color Cyan "Reviewing Auto-Update Ability..."
 autoupdate $global:howoften
-LogWrite -color Green "Auto-Update AbilityReview Completed"
+LogWrite -color Green "Auto-Update Ability Review Completed"
 LogWrite ""
 LogWrite -color Yellow "=============================================="
 LogWrite ""
 LogWrite -color Cyan "You may now follow the remaining setup instructions here (if applicable):"
-LogWrite -color Cyan "https://github.com/Storj/bridge#manually"
+LogWrite -color Cyan "https://github.com/Storj/bridge#configuration"
 LogWrite ""
 LogWrite -color Yellow "=============================================="
 LogWrite -color Cyan "Completed storj-bridge Automated Management"

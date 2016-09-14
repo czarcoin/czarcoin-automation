@@ -11,7 +11,8 @@
   Then it installs/updates storj
 
 .INPUTS
-
+  -silent - [optional] this will write everything to a log file and prevent the script from running pause commands.
+  -autoreboot - [optional] call autoreboot if you want this to autoreboot
 .OUTPUTS
   Return Codes (follows .msi standards) (https://msdn.microsoft.com/en-us/library/windows/desktop/aa376931(v=vs.85).aspx)
 #>
@@ -19,13 +20,20 @@
 #-----------------------------------------------------------[Parameters]------------------------------------------------------------
 
 param(
+    [Parameter(Mandatory=$false)]
+    [SWITCH]$silent,
+
+    [Parameter(Mandatory=$false)]
+    [SWITCH]$autoreboot,
+
     [parameter(Mandatory=$false,ValueFromRemainingArguments=$true)]
     [STRING]$other_args
  )
 
 #---------------------------------------------------------[Initialisations]--------------------------------------------------------
 
-$global:script_version="1.3" # Script version
+$global:script_version="1.7" # Script version
+$global:autoreboot=""
 $global:return_code=$global:error_success #default success
 $global:user_profile=$env:userprofile + '\' # (Default: %USERPROFILE%) - runas overwrites this variable
 $global:appdata=$env:appdata + '\' # (Default: %APPDATA%\) - runas overwrites this variable
@@ -45,7 +53,6 @@ $storj_log_path=$work_directory + '\core'
 $nodejs_ver="4" #make sure to reference Major Branch Version (Default: 4)
 
 $python_ver="2" #make sure to reference Major Branch Version (Default: 2)
-$python_path = "C:\Python27\" #make sure ends with \ (Default: C:\Python27\)
 
 $visualstudio_ver="2015" # currently only supports 2015 Edition (Default: 2015)
 $visualstudio_dl="http://go.microsoft.com/fwlink/?LinkID=626924"  #  link to 2015 download   (Default: http://go.microsoft.com/fwlink/?LinkID=626924)
@@ -88,6 +95,20 @@ function handleParameters() {
 		ErrorOut "Save Directory $save_dir failed to create, try it manually..."
 	}
 
+    if($silent) {
+        LogWrite "Logging to file $storj_install_log_file"
+    }
+    else
+    {
+        $message="Logging to console"
+        LogWrite $message
+    }
+
+    if($autoreboot) {
+        LogWrite "Will auto-reboot if needed"
+        $global:autoreboot="true"
+    }
+
     #checks for unknown/invalid parameters referenced
     if ($other_args) {
         ErrorOut -code $global:error_invalid_parameter "ERROR: Unknown arguments: $other_args"
@@ -95,7 +116,7 @@ function handleParameters() {
 }
 
 Function LogWrite([string]$logstring,[string]$color) {
-    $LogTime = Get-Date -Format "MM-dd-yyyy hh:mm:ss"
+    $LogTime = Get-Date -Format "MM-dd-yyyy HH:mm:ss"
     $logmessage="["+$LogTime+"] "+$logstring
     if($silent) {
         if($logstring) {
@@ -492,6 +513,7 @@ function PythonCheck([string]$version) {
 
         $global:reboot_needed="true"
         LogWrite -color Green "Python Installed Successfully"
+        $installed_version = $version
     }
     else
     {
@@ -607,6 +629,14 @@ function PythonCheck([string]$version) {
     LogWrite "Checking for Python Environment Path..."
     $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine")
     $PathasArray=($Env:PATH).split(';')
+   
+    $split_version=$installed_version.split('.')
+    $python_path="C:\Python" + $split_version[0] + $split_version[1] + "\"
+
+    if(!(Test-Path -pathType container $python_path)) {
+        ErrorOut "Save directory $python_path does not exist";
+    }
+   
     if ($PathasArray -contains $python_path -or $PathAsArray -contains $python_path+'\') {
         LogWrite "Python Environment Path $python_path already within System Environment Path, skipping..."
     } else {
@@ -688,72 +718,87 @@ function VisualStudioCheck([string]$version, [string]$dl_link) {
 function storjCheck() {
     LogWrite "Checking if storj is installed..."
     $Arguments = "list -g"
-    $output=(UseNPM $Arguments| Where-Object {$_ -like '*storj*'})
-
+    $output=(UseNPM $Arguments| Where-Object {$_ -like '*storj@*'})
     #write npm logs to log file if in silent mode
     if($silent) {
         LogWrite "npm $Arguments results"
         Add-content $storj_install_log_file -value $output
     }
-
     if (!$output.Length -gt 0) {
         LogWrite "storj is not installed."
         LogWrite "Installing storj (latest version released)..."
-
         $Arguments = "install -g storj"
         $result=(UseNPM $Arguments| Where-Object {$_ -like '*ERR!*'})
-
         #write npm logs to log file if in silent mode
         if($silent) {
             LogWrite "npm $Arguments results"
             Add-content $storj_install_log_file -value $result
         }
-
-        if ($result.Length -gt 0) {
+        if($result.Length -gt 0) {
             ErrorOut "storj did not complete installation successfully...try manually installing it..."
         }
-
         LogWrite -color Green "storj Installed Successfully"
-    }
-    else
-    {
-        LogWrite "storj already installed."
-
-        if(Test-Path $storj_log_path) {
-            LogWrite "Removing Logs files $storj_log_path"
-            Remove-Item "$storj_log_path\*" -force
-        }
-
-        LogWrite -color Cyan "Performing storj Update..."
-
-        #$Arguments = "update -g storj"
-        $Arguments = "install -g storj"
-        $result=(UseNPM $Arguments| Where-Object {$_ -like '*ERR!*'})
-
+    } else {
+        LogWrite -color Green "storj already installed."
+        LogWrite "Checking if storj update is needed"
+        $Arguments = "outdated -g -depth 1 storj"
+        $result=(UseNPM $Arguments)
         #write npm logs to log file if in silent mode
         if($silent) {
             LogWrite "npm $Arguments results"
             Add-content $storj_install_log_file -value $result
         }
-
         if ($result.Length -gt 0) {
+            LogWrite -color Red "storj update needed"
+            LogWrite -color Cyan "Performing storj Update..."
+            if(Test-Path $storj_log_path) {
+                LogWrite "Removing Logs files $storj_log_path"
+                Remove-Item "$storj_log_path\*" -force
+            }
+            $Arguments = "install -g storj-cli"
+            $result=(UseNPM $Arguments | Where-Object {$_ -like '*ERR!*'})
+            if ($result.Length -gt 0) {
+                ErrorOut "storj did not complete update successfully...try manually updating it..."
+            }
+            #write npm logs to log file if in silent mode
+            if($silent) {
+                LogWrite "npm $Arguments results"
+                Add-content $storj_install_log_file -value $result
+            }
+            LogWrite -color Green "storj Update Completed"
+            LogWrite -color Green "storj services started"
+        } else {
+            LogWrite -color Green "No update needed for storj"
+        }
+        LogWrite -color Cyan "Checking storj version..."
+        $Arguments = "list -g storj"
+        $result=(UseNPM $Arguments)
+        if ($result.Length -lt 1) {
             ErrorOut "storj did not complete update successfully...try manually updating it..."
         }
-        
-        LogWrite -color Green "storj Update Completed"
-
-        LogWrite -color Cyan "Checking storj version..."
-
-        $pos=$output.IndexOf("storj")
-
-        $version = $output.Substring($pos+6)
-
-        if(!$version) {
-            ErrorOut "storj Version is Unknown - Error"
+        #write npm logs to log file if in silent mode
+        if($silent) {
+            LogWrite "npm $Arguments results"
+            Add-content $storj_install_log_file -value $result
         }
-
+        $result=$result.Split('@')
+        $version = $result[2]
         LogWrite -color Green "storj Installed Version: $version"
     }
+    LogWrite -color Cyan "Checking storj Version..."
+    LogWrite -color Cyan "Placing version into log file..."
+    if(!(Test-Path -pathType container $save_dir)) {
+    	ErrorOut "Log directory $save_dir does not exist";
+    }
+    $Arguments="/c storj -V"
+    if($global:runas) {
+        Start-Process "cmd.exe" -Credential $global:credential -WorkingDirectory "$global:npm_path" -ArgumentList $Arguments -RedirectStandardOutput $global:storj_log_ver -Wait
+    } else {
+        Start-Process "cmd.exe" -ArgumentList $Arguments -RedirectStandardOutput $global:storj_log_ver -Wait
+    }
+    $timestamp = Get-Date -Format "yyyy-MM-dd HH:MM:ss"
+    Add-Content $global:storj_log_ver "Timestamp: $timestamp"
+    LogWrite -color Cyan "Version recorded."
 }
 
 function Get-IsProgramInstalled([string]$program) {
@@ -905,6 +950,17 @@ function UseNPM([string]$Arguments) {
     return $results
 }
 
+function storj_checkver([string]$script_ver) {
+    LogWrite "Checking for Storj Script Version Environment Variable..."
+    $env:STORJ_SCRIPT_VER = [System.Environment]::GetEnvironmentVariable("STORJ_SCRIPT_VER","Machine")
+    if ($env:STORJ_SCRIPT_VER -eq $script_ver) {
+    	LogWrite "STORJ_SCRIPT_VER Environment Variable $script_ver already matches, skipping..."
+    } else {
+        Set-ItemProperty -Path 'Registry::HKEY_LOCAL_MACHINE\System\CurrentControlSet\Control\Session Manager\Environment' -Name STORJ_SCRIPT_VER -Value $script_ver -ErrorAction SilentlyContinue
+        LogWrite "Storj Script Version Environment Variable Added: $script_ver"
+    }
+}
+
 function CheckRebootNeeded() {
 	if($global:reboot_needed) {
         if($global:autoreboot) {
@@ -988,6 +1044,13 @@ storjCheck
 LogWrite -color Green "storj Review Completed"
 LogWrite ""
 LogWrite -color Yellow "=============================================="
+LogWrite ""
+LogWrite -color Cyan "Reviewing Script Registry Version..."
+storj_checkver $global:script_version
+LogWrite -color Green "Script Registry Version Completed"
+LogWrite ""
+LogWrite -color Yellow "=============================================="
+LogWrite ""
 LogWrite -color Cyan "Completed storj Automated Management"
 LogWrite -color Cyan "You can now utilize Storj core"
 LogWrite ""
