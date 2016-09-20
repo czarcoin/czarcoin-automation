@@ -58,6 +58,7 @@
      -howoften - [optional] Days to check for updates (Default: Every day)
      -checktime - [optional] Time to check for updates (Default: 3:00am Local Time)
    -update - [optional] Performs an update only function and skips the rest
+   -beta - [optional] Enables installation of beta releases
 .OUTPUTS
   Return Codes (follows .msi standards) (https://msdn.microsoft.com/en-us/library/windows/desktop/aa376931(v=vs.85).aspx)
 #>
@@ -149,13 +150,16 @@ param(
     [Parameter(Mandatory=$false)]
     [SWITCH]$update,
 
+    [Parameter(Mandatory=$false)]
+    [SWITCH]$beta,
+
     [parameter(Mandatory=$false,ValueFromRemainingArguments=$true)]
     [STRING]$other_args
  )
 
 #---------------------------------------------------------[Initialisations]--------------------------------------------------------
 
-$global:script_version="5.1" # Script version
+$global:script_version="5.2" # Script version
 $global:reboot_needed=""
 $global:noupnp=""
 $global:installsvc="true"
@@ -188,6 +192,7 @@ $global:tunconns="3" #Default 3
 $global:tunsvcport="0" #Default 0; random
 $global:tunstart="0" #Defualt 0; random
 $global:tunend="0" #Default 0; random
+$global:beta="0" #Default 0
 
 #----------------------------------------------------------[Declarations]----------------------------------------------------------
 
@@ -260,6 +265,11 @@ function handleParameters() {
     } else {
         $message="Logging to console"
         LogWrite $message
+    }
+
+    if($beta) {
+        LogWrite "Beta Updates Enabled"
+        $global:beta="true"
     }
 
     if ($runas) {
@@ -1014,7 +1024,14 @@ function storjshare-cliCheck() {
         }
 
         LogWrite "Installing storjshare-cli (latest version released)..."
-        $Arguments = "install -g storjshare-cli"
+
+        if($global:beta) {
+            $storjshare_cli_type = "storjshare-cli@next"
+        } else {
+            $storjshare_cli_type = "storjshare-cli"
+        }
+
+        $Arguments = "install -g $storjshare_cli_type"
         $result=(UseNPM $Arguments| Where-Object {$_ -like '*ERR!*'})
         #write npm logs to log file if in silent mode
         if($silent) {
@@ -1066,7 +1083,13 @@ function storjshare-cliCheck() {
                 rm -r "${global:appdata}npm-cache" -force
             }
 
-            $Arguments = "install -g storjshare-cli"
+            if($global:beta) {
+                $storjshare_cli_type = "storjshare-cli@next"
+            } else {
+                $storjshare_cli_type = "storjshare-cli"
+            }
+
+            $Arguments = "install -g $storjshare_cli_type"
             $result=(UseNPM $Arguments | Where-Object {$_ -like '*ERR!*'})
             if ($result.Length -gt 0) {
                 ErrorOut "storjshare-cli did not complete update successfully...try manually updating it..."
