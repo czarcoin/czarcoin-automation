@@ -269,7 +269,7 @@ function handleParameters() {
 
     if($beta) {
         LogWrite "Beta Updates Enabled"
-        $global:beta="true"
+        $global:beta="1"
     }
 
     if ($runas) {
@@ -1025,7 +1025,7 @@ function storjshare-cliCheck() {
 
         LogWrite "Installing storjshare-cli (latest version released)..."
 
-        if($global:beta) {
+        if($global:beta -eq 1) {
             $storjshare_cli_type = "storjshare-cli@next"
         } else {
             $storjshare_cli_type = "storjshare-cli"
@@ -1083,7 +1083,7 @@ function storjshare-cliCheck() {
                 rm -r "${global:appdata}npm-cache" -force
             }
 
-            if($global:beta) {
+            if($global:beta -eq 1) {
                 $storjshare_cli_type = "storjshare-cli@next"
             } else {
                 $storjshare_cli_type = "storjshare-cli"
