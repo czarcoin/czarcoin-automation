@@ -234,7 +234,7 @@ $automatic_restart_timeout=10  #in seconds Default: 10
 $automated_script_path=Split-Path -parent $PSCommandPath
 $automated_script_path=$automated_script_path + '\'
 
-$recompile_file_path=$storjshare_cli_install_log_path
+$recompile_file_path=$storjshare_cli_install_log_path + "\recompile.txt"
 
 #-----------------------------------------------------------[Functions]------------------------------------------------------------
 
