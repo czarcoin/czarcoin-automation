@@ -58,6 +58,7 @@
      -howoften - [optional] Days to check for updates (Default: Every day)
      -checktime - [optional] Time to check for updates (Default: 3:00am Local Time)
    -update - [optional] Performs an update only function and skips the rest
+   -beta - [optional] Enables installation of beta releases
 .OUTPUTS
   Return Codes (follows .msi standards) (https://msdn.microsoft.com/en-us/library/windows/desktop/aa376931(v=vs.85).aspx)
 #>
@@ -149,13 +150,16 @@ param(
     [Parameter(Mandatory=$false)]
     [SWITCH]$update,
 
+    [Parameter(Mandatory=$false)]
+    [SWITCH]$beta,
+
     [parameter(Mandatory=$false,ValueFromRemainingArguments=$true)]
     [STRING]$other_args
  )
 
 #---------------------------------------------------------[Initialisations]--------------------------------------------------------
 
-$global:script_version="5.1" # Script version
+$global:script_version="5.5" # Script version
 $global:reboot_needed=""
 $global:noupnp=""
 $global:installsvc="true"
@@ -188,6 +192,8 @@ $global:tunconns="3" #Default 3
 $global:tunsvcport="0" #Default 0; random
 $global:tunstart="0" #Defualt 0; random
 $global:tunend="0" #Default 0; random
+$global:beta="0" #Default 0
+$global:recompile=""
 
 #----------------------------------------------------------[Declarations]----------------------------------------------------------
 
@@ -200,9 +206,11 @@ $storjshare_cli_log_path=$work_directory + '\cli'
 $global:storjshare_cli_log="$storjshare_cli_log_path\$global:svcname.log"
 $global:storjshare_cli_log_ver="$save_dir\storjshare_ver.log"
 
-$nodejs_ver="4" #make sure to reference Major Branch Version (Default: 4)
+$nodejs_ver="6" #make sure to reference Major Branch Version (Default: 6)
 
 $python_ver="2" #make sure to reference Major Branch Version (Default: 2)
+
+$openssl_ver="1.0.2j" #make sure to reference Major Branch Version (Default: 1.0.2j)
 
 $visualstudio_ver="2015" # currently only supports 2015 Edition (Default: 2015)
 $visualstudio_dl="http://go.microsoft.com/fwlink/?LinkID=626924"  #  link to 2015 download   (Default: http://go.microsoft.com/fwlink/?LinkID=626924)
@@ -225,6 +233,8 @@ $automatic_restart_timeout=10  #in seconds Default: 10
 
 $automated_script_path=Split-Path -parent $PSCommandPath
 $automated_script_path=$automated_script_path + '\'
+
+$recompile_file_path=$storjshare_cli_install_log_path + "\recompile.txt"
 
 #-----------------------------------------------------------[Functions]------------------------------------------------------------
 
@@ -262,6 +272,11 @@ function handleParameters() {
         LogWrite $message
     }
 
+    if($beta) {
+        LogWrite "Beta Updates Enabled"
+        $global:beta="1"
+    }
+
     if ($runas) {
         $global:runas="true"
 
@@ -294,6 +309,11 @@ function handleParameters() {
         LogWrite "Using Service Account: $global:username"
         LogWrite "Granting $global:username Logon As A Service Right"
         Grant-LogOnAsService $global:username
+    }
+
+    if(Test-Path $recompile_file_path) {
+        LogWrite "Recompile will be needed"
+        $global:recompile="true"
     }
 
     if($update) {
@@ -618,6 +638,53 @@ function GitForWindowsCheck() {
     }
 }
 
+function OpenSSLCheck() {
+    LogWrite "Checking if OpenSSL for Windows is installed..."
+    if(!(Get-IsProgramInstalled "OpenSSL")) {
+        $version = $openssl_ver
+
+        LogWrite "Found Latest Version of OpenSSL for Windows - ${version}"
+
+        LogWrite "OpenSSL for Windows is not installed."
+        if([System.IntPtr]::Size -eq 4) {
+            $arch="32-bit"
+            $arch_ver='Win32OpenSSL-'
+        } else {
+            $arch="64-bit"
+            $arch_ver='Win64OpenSSL-'
+        }
+
+    $file_ver = $version.replace('.','_')
+
+	$filename = $arch_ver + $file_ver + '.exe';
+	$save_path = '' + $save_dir + '\' + $filename;
+        $url='https://slproweb.com/download/' + $filename;
+	if(!(Test-Path -pathType container $save_dir)) {
+	    ErrorOut "Save directory $save_dir does not exist"
+	}
+        LogWrite "Downloading OpenSSL for Windows ($arch) $version..."
+        DownloadFile $url $save_path
+        LogWrite "OpenSSL for Windows downloaded"
+
+	LogWrite "Installing OpenSSL for Windows $version..."
+        $Arguments = "/silent"
+	InstallEXE $save_path $Arguments
+        
+        if(!(Get-IsProgramInstalled "OpenSSL")) {
+           ErrorOut "OpenSSL for Windows did not complete installation successfully...try manually installing it..."
+        }
+        $global:reboot_needed="true"
+        $global:recompile="true"
+        LogWrite -color Green "OpenSSL for Windows Installed Successfully"
+    }
+    else
+    {
+        LogWrite "OpenSSL for Windows is already installed."
+       
+        LogWrite -color Green "OpenSSL for Windows Installed Version: $openssl_ver"
+    }
+}
+
 function NodejsCheck([string]$version) {
     LogWrite "Checking if Node.js is installed..."
     if(!(Get-IsProgramInstalled "Node.js")) {
@@ -661,6 +728,7 @@ function NodejsCheck([string]$version) {
            ErrorOut "Node.js did not complete installation successfully...try manually installing it..."
         }
         $global:reboot_needed="true"
+        $global:recompile="true"
         LogWrite -color Green "Node.js Installed Successfully"
     } else {
         LogWrite "Node.js already installed."
@@ -720,6 +788,7 @@ function NodejsCheck([string]$version) {
                ErrorOut "Node.js did not complete installation successfully...try manually updating it..."
             }
             $global:reboot_needed="true"
+            $global:recompile="true"
             LogWrite -color Green "Node.js Updated Successfully"
             $installed_version = $version
         }
@@ -806,6 +875,7 @@ function PythonCheck([string]$version) {
             ErrorOut "Python did not complete installation successfully...try manually installing it..."
         }
         $global:reboot_needed="true"
+        $global:recompile="true"
         LogWrite -color Green "Python Installed Successfully"
         $installed_version=$version
     } else {
@@ -892,6 +962,7 @@ function PythonCheck([string]$version) {
                ErrorOut "Python did not complete installation successfully...try manually installing it..."
             }
             $global:reboot_needed="true"
+            $global:recompile="true"
             LogWrite -color Green "Python Updated Successfully"
             $installed_version=$version
         }
@@ -991,6 +1062,7 @@ function storjshare-cliCheck() {
         $services | ForEach-Object{Stop-Service $_.name -ErrorAction SilentlyContinue | Out-Null}
         if(Test-Path $global:storjshare_cli_log) {
             LogWrite "Removing Log file: $global:storjshare_cli_log"
+            Remove-Item "$global:storjshare_cli_log" -force
         }
         if(Test-Path $storjshare_cli_log_path) {
             LogWrite "Removing Logs files $storjshare_cli_log_path"
@@ -1014,7 +1086,14 @@ function storjshare-cliCheck() {
         }
 
         LogWrite "Installing storjshare-cli (latest version released)..."
-        $Arguments = "install -g storjshare-cli"
+
+        if($global:beta -eq 1) {
+            $storjshare_cli_type = "storjshare-cli@next"
+        } else {
+            $storjshare_cli_type = "storjshare-cli"
+        }
+
+        $Arguments = "install -g $storjshare_cli_type"
         $result=(UseNPM $Arguments| Where-Object {$_ -like '*ERR!*'})
         #write npm logs to log file if in silent mode
         if($silent) {
@@ -1024,6 +1103,17 @@ function storjshare-cliCheck() {
         if($result.Length -gt 0) {
             ErrorOut "storjshare-cli did not complete installation successfully...try manually installing it..."
         }
+
+        if($global:recompile) {
+            LogWrite "Clearing recompile"
+            $global:recompile=""
+        }
+
+        if(Test-Path $recompile_file_path) {
+            LogWrite "Removing recompile file: $recompile_file_path"
+            Remove-Item "$recompile_file_path" -force
+        }
+
         LogWrite -color Green "storjshare-cli Installed Successfully"
     } else {
         LogWrite -color Green "storjshare-cli already installed."
@@ -1035,7 +1125,7 @@ function storjshare-cliCheck() {
             LogWrite "npm $Arguments results"
             Add-content $storjshare_cli_install_log_file -value $result
         }
-        if ($result.Length -gt 0) {
+        if ($result.Length -gt 0 -or $global:recompile) {
             LogWrite -color Red "storjshare-cli update needed"
             LogWrite -color Cyan "Performing storjshare-cli Update..."
             LogWrite "Stopping $global:svcname service (if applicable)"
@@ -1044,6 +1134,7 @@ function storjshare-cliCheck() {
             $services | ForEach-Object{Stop-Service $_.name -ErrorAction SilentlyContinue | Out-Null}
             if(Test-Path $global:storjshare_cli_log) {
                 LogWrite "Removing Log file: $global:storjshare_cli_log"
+                Remove-Item "$global:storjshare_cli_log" -force
             }
             if(Test-Path $storjshare_cli_log_path) {
                 LogWrite "Removing Logs files $storjshare_cli_log_path"
@@ -1066,7 +1157,13 @@ function storjshare-cliCheck() {
                 rm -r "${global:appdata}npm-cache" -force
             }
 
-            $Arguments = "install -g storjshare-cli"
+            if($global:beta -eq 1) {
+                $storjshare_cli_type = "storjshare-cli@next"
+            } else {
+                $storjshare_cli_type = "storjshare-cli"
+            }
+
+            $Arguments = "install -g $storjshare_cli_type"
             $result=(UseNPM $Arguments | Where-Object {$_ -like '*ERR!*'})
             if ($result.Length -gt 0) {
                 ErrorOut "storjshare-cli did not complete update successfully...try manually updating it..."
@@ -1076,6 +1173,17 @@ function storjshare-cliCheck() {
                 LogWrite "npm $Arguments results"
                 Add-content $storjshare_cli_install_log_file -value $result
             }
+
+           if($global:recompile) {
+                LogWrite "Clearing recompile"
+                $global:recompile=""
+           }
+
+            if(Test-Path $recompile_file_path) {
+                LogWrite "Removing recompile file: $recompile_file_path"
+                Remove-Item "$recompile_file_path" -force
+            }
+
             LogWrite -color Green "storjshare-cli Update Completed"
             LogWrite "Starting storjshare-cli services"
             $services=Get-Service -Name *storjshare-cli*
@@ -1150,30 +1258,31 @@ function Get-ProgramVersion([string]$program) {
 
 function DownloadFile([string]$url, [string]$targetFile) {
     if((Test-Path $targetFile)) {
-        LogWrite "$targetFile exists, using this download";
-    } else {
-        $uri = New-Object "System.Uri" "$url"
-        $request = [System.Net.HttpWebRequest]::Create($uri)
-        $request.set_Timeout(15000) #15 second timeout
-        $response = $request.GetResponse()
-        $totalLength = [System.Math]::Floor($response.get_ContentLength()/1024)
-        $responseStream = $response.GetResponseStream()
-        $targetStream = New-Object -TypeName System.IO.FileStream -ArgumentList $targetFile, Create
-        $buffer = new-object byte[] 10KB
-        $count = $responseStream.Read($buffer,0,$buffer.length)
-        $downloadedBytes = $count
-        while ($count -gt 0) {
-            $targetStream.Write($buffer, 0, $count)
-            $count = $responseStream.Read($buffer,0,$buffer.length)
-            $downloadedBytes = $downloadedBytes + $count
-            Write-Progress -activity "Downloading file '$($url.split('/') | Select -Last 1)'" -status "Downloaded ($([System.Math]::Floor($downloadedBytes/1024))K of $($totalLength)K): " -PercentComplete ((([System.Math]::Floor($downloadedBytes/1024)) / $totalLength)  * 100)
-        }
-        Write-Progress -activity "Finished downloading file '$($url.split('/') | Select -Last 1)'"
-        $targetStream.Flush()
-        $targetStream.Close()
-        $targetStream.Dispose()
-        $responseStream.Dispose()
+        LogWrite "$targetFile exists, removing it and re-downloading it";
+        Remove-Item $targetFile
     }
+
+    $uri = New-Object "System.Uri" "$url"
+    $request = [System.Net.HttpWebRequest]::Create($uri)
+    $request.set_Timeout(15000) #15 second timeout
+    $response = $request.GetResponse()
+    $totalLength = [System.Math]::Floor($response.get_ContentLength()/1024)
+    $responseStream = $response.GetResponseStream()
+    $targetStream = New-Object -TypeName System.IO.FileStream -ArgumentList $targetFile, Create
+    $buffer = new-object byte[] 10KB
+    $count = $responseStream.Read($buffer,0,$buffer.length)
+    $downloadedBytes = $count
+    while ($count -gt 0) {
+        $targetStream.Write($buffer, 0, $count)
+        $count = $responseStream.Read($buffer,0,$buffer.length)
+        $downloadedBytes = $downloadedBytes + $count
+        Write-Progress -activity "Downloading file '$($url.split('/') | Select -Last 1)'" -status "Downloaded ($([System.Math]::Floor($downloadedBytes/1024))K of $($totalLength)K): " -PercentComplete ((([System.Math]::Floor($downloadedBytes/1024)) / $totalLength)  * 100)
+    }
+    Write-Progress -activity "Finished downloading file '$($url.split('/') | Select -Last 1)'"
+    $targetStream.Flush()
+    $targetStream.Close()
+    $targetStream.Dispose()
+    $responseStream.Dispose()
 }
 
 function FollowDownloadFile([string]$url, [string]$targetFile) {
@@ -1265,6 +1374,12 @@ function UseNPM([string]$Arguments) {
 
 function CheckRebootNeeded() {
     if($global:reboot_needed) {
+
+        if($global:recompile) {
+            LogWrite "Recompile is needed - storing for after reboot"
+            Add-content $recompile_file_path -value "recompile needed"
+        }
+
         if($global:autoreboot) {
             LogWrite -color Red "=============================================="
             LogWrite -color Red "Initiating Auto-Reboot in $automatic_restart_timeout seconds"
@@ -1746,6 +1861,7 @@ LogWrite -color Red "USE AT YOUR OWN RISK"
 LogWrite ""
 LogWrite -color Yellow "Recommended Versions of Software"
 LogWrite -color Cyan "Git for Windows: Latest Version"
+LogWrite -color Cyan "OpenSSL for Windows: $openssl_ver"
 LogWrite -color Cyan "Node.js - Major Branch: $nodejs_ver"
 LogWrite -color Cyan "Python - Major Branch: $python_ver"
 LogWrite -color Cyan "Visual Studio: $visualstudio_ver Commmunity Edition"
@@ -1757,6 +1873,10 @@ LogWrite ""
 LogWrite -color Yellow "Reviewing Git for Windows..."
 GitForWindowsCheck
 LogWrite -color Green "Git for Windows Review Completed"
+LogWrite ""
+LogWrite -color Yellow "Reviewing OpenSSL for Windows..."
+OpenSSLCheck
+LogWrite -color Green "OpenSSL for Windows Review Completed"
 LogWrite ""
 LogWrite -color Yellow "Reviewing Node.js..."
 NodejsCheck $nodejs_ver
